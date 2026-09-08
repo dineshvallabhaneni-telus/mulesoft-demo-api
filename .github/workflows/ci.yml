@@ -158,20 +158,9 @@ jobs:
         run: |
           RESPONSE=$(curl -sS \
             -w "\n%{http_code}" \
-            https://api.anthropic.com/v1/messages \
-            -H "x-api-key: $ANTHROPIC_API_KEY" \
-            -H "anthropic-version: 2023-06-01" \
-            -H "content-type: application/json" \
-            -d '{
-              "model": "claude-sonnet-4-20250514",
-              "max_tokens": 100,
-              "messages": [
-                {
-                  "role": "user",
-                  "content": "Respond with exactly: Claude API"
-                }
-              ]
-            }')
+            https://api.fuelix.ai/v1/models \
+            -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
+            -H "content-type: application/json" ')
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
           BODY=$(echo "$RESPONSE" | sed '$d')
