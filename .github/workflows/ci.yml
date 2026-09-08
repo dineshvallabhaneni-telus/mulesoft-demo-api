@@ -281,7 +281,7 @@ jobs:
           # ANTHROPIC_MODEL: <fuel-model-id>
 
         run: |
-          claude -p "$(cat Prompt/prompt.md)" \
+          claude -p "$(cat $PROMPT_FILE)" \
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
             --output-format text \
