@@ -209,6 +209,15 @@ jobs:
           echo "Claude model: $MODEL"
           echo "Claude API test passed successfully."
 
+      - name: Checkout source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Checkout Previouse source
+        run: |
+          mkdir previous_ws
+          git archice HEAD~1 | tar -x -C previous_ws
 
       - name: Checkout Claude Prompts
         uses: actions/checkout@v5
