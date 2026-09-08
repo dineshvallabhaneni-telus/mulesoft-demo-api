@@ -4,7 +4,7 @@
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
 
-	<groupId>bd928e71-2c65-4c26-b6b8-4685e8667b87</groupId>
+	<groupId>db8bcc0b-8236-4b9b-8fe0-2d4cf0b0bcc2</groupId>
 	<artifactId>mulesoft-demo-api</artifactId>
 	<!-- Version is overridden by CI using -Drevision=1.0.x -->
     <version>${revision}</version>
