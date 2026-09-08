@@ -151,6 +151,23 @@ jobs:
 
           echo "ANTHROPIC_API_KEY is configured."
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet python-docx
+          npm install --global --silent newman
+
+      - name: Install Claude Code
+        run: npm install --global --silent @anthropic-ai/claude-code
+
       - name: Test Claude API
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -254,23 +271,6 @@ jobs:
           ls -lh "$PROMPT_FILE"
 
           echo "Claude prompt loaded successfully."
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-
-      - name: Install dependencies
-        run: |
-          python3 -m pip install --quiet --upgrade pip
-          python3 -m pip install --quiet python-docx
-          npm install --global --silent newman
-
-      - name: Install Claude Code
-        run: npm install --global --silent @anthropic-ai/claude-code
 
       - name: Print the file location
         run: |
