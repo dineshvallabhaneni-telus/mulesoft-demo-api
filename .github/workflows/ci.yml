@@ -217,7 +217,7 @@ jobs:
       - name: Checkout Previouse source
         run: |
           mkdir previous_ws
-          git archice HEAD~1 | tar -x -C previous_ws
+          git worktree add previous_ws HEAD~1
 
       - name: Checkout Claude Prompts
         uses: actions/checkout@v5
@@ -230,9 +230,7 @@ jobs:
       - name: Show Workspace
         run: |
           echo "Workspace $GITHUB_WORKSPACE"
-          pwd
-          ls -la
-          ls -la claude-repo
+          find "$GITHUB_WORKSPACE" -maxdepth 3 
 
       - name: Load Claude Prompt
         shell: bash
