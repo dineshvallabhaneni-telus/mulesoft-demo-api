@@ -1,0 +1,88 @@
+{
+  "info": {
+    "_postman_id": "b00c742d-540a-41eb-938a-bf51469d0e94",
+    "name": "demo-api",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "13923463"
+  },
+  "item": [
+    {
+      "name": "health-check",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://mulesoft-claude-demo-api-dev-3wri0x.5sc6y6-4.usa-e2.cloudhub.io/api/health-check",
+          "protocol": "https",
+          "host": [
+            "mulesoft-claude-demo-api-dev-3wri0x",
+            "5sc6y6-4",
+            "usa-e2",
+            "cloudhub",
+            "io"
+          ],
+          "path": [
+            "api",
+            "health-check"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "post-message",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "https://mulesoft-claude-demo-api-dev-3wri0x.5sc6y6-4.usa-e2.cloudhub.io/api/post-message",
+          "protocol": "https",
+          "host": [
+            "mulesoft-claude-demo-api-dev-3wri0x",
+            "5sc6y6-4",
+            "usa-e2",
+            "cloudhub",
+            "io"
+          ],
+          "path": [
+            "api",
+            "post-message"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "save post-message",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"message\": \"Hi\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "https://mulesoft-claude-demo-api-dev-3wri0x.5sc6y6-4.usa-e2.cloudhub.io/api/post-message",
+          "protocol": "https",
+          "host": [
+            "mulesoft-claude-demo-api-dev-3wri0x",
+            "5sc6y6-4",
+            "usa-e2",
+            "cloudhub",
+            "io"
+          ],
+          "path": [
+            "api",
+            "post-message"
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}

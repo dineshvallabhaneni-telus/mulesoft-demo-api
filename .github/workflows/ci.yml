@@ -233,7 +233,7 @@ jobs:
           echo "Claude repository:"
           ls -la claude-repo
 
-          PROMPT_FILE="claude-repo/Prompts/prompt.md"
+          PROMPT_FILE="claude-repo/Prompt/prompt.md"
 
           if [ ! -f "$PROMPT_FILE" ]; then
             echo "::error::Prompt file not found: $PROMPT_FILE"
