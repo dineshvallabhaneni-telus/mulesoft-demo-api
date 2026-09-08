@@ -213,10 +213,17 @@ jobs:
       - name: Checkout Claude Prompts
         uses: actions/checkout@v5
         with:
-          repository: 
+          repository: dineshvallabhaneni-telus/mulesoft-claude-postman
           ref: main
-          path: dineshvallabhaneni-telus/mulesoft-claude-postman
+          path: claude-repo
           token: ${{ secrets.GIT_TOKEN }}
+
+      - name: Show Workspace
+        run: |
+          echo "Workspace $GITHUB_WORKSPACE"
+          pwd
+          ls -la
+          ls -la claude-repo
 
       - name: Load Claude Prompt
         shell: bash
