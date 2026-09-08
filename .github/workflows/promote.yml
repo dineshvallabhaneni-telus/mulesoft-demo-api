@@ -1,0 +1,137 @@
+name: Promote Mule Application
+
+on:
+
+  workflow_dispatch:
+
+    inputs:
+
+      environment:
+
+        description: "Target environment"
+
+        required: true
+
+        type: choice
+
+        options:
+
+          - qa
+
+          - prod
+
+
+permissions:
+
+  contents: read
+
+  actions: read
+
+
+jobs:
+
+  find-artifact:
+
+    name: Find artifact
+
+    runs-on: ubuntu-latest
+
+
+    outputs:
+
+      run_id: ${{ steps.find.outputs.run_id }}
+
+      artifact_name: ${{ steps.find.outputs.artifact_name }}
+
+
+    steps:
+
+      # --------------------------------
+      # Find latest successful CI
+      # --------------------------------
+
+      - name: Find latest successful CI run
+
+        id: find
+
+        env:
+
+          GH_TOKEN: ${{ github.token }}
+
+        shell: bash
+
+        run: |
+
+          RUN_ID=$(gh run list \
+            --workflow ci.yml \
+            --branch develop \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+
+
+          if [ -z "$RUN_ID" ]; then
+
+            echo "ERROR: No successful CI run found."
+
+            exit 1
+
+          fi
+
+
+          echo "CI Run ID: $RUN_ID"
+
+
+          ARTIFACT_NAME=$(gh api \
+            "/repos/${{ github.repository }}/actions/runs/${RUN_ID}/artifacts" \
+            --jq '
+              .artifacts[]
+              | select(.expired == false)
+              | select(.name | startswith("mule-application-"))
+              | .name
+            ' |
+            head -1)
+
+
+          if [ -z "$ARTIFACT_NAME" ]; then
+
+            echo "ERROR: Mule application artifact not found."
+
+            exit 1
+
+          fi
+
+
+          echo "Artifact: $ARTIFACT_NAME"
+
+
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+          echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+
+  # ====================================
+  # PROMOTE
+  # ====================================
+
+  promote:
+
+    name: Promote to ${{ inputs.environment }}
+
+    needs:
+
+      - find-artifact
+
+
+    uses: ./.github/workflows/reusable-deploy.yml
+
+
+    with:
+
+      environment: ${{ inputs.environment }}
+
+      run_id: ${{ needs.find-artifact.outputs.run_id }}
+
+
+    secrets: inherit

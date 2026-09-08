@@ -1,0 +1,39 @@
+#%RAML 1.0
+title: mulesoft-demo-api
+version: v1
+/health-check:
+  get:
+    responses:
+      200:
+        body:
+          application/json:
+            example: | 
+              {
+                "Status": "Success",
+                "timestamp": "2026-09-03T19:19:54"
+              }
+/post-message:
+  get:
+    responses:
+      200:
+        body:
+          application/json:
+            example: | 
+              {
+                "message": "this the message posted"
+              }  
+  post:
+    body:
+      application/json:
+        example: |
+          {
+            "message": "this the message posted"
+          }
+    responses:
+      200:
+        body:
+          application/json:
+            example: |
+              {
+                "status": "success"
+              }             

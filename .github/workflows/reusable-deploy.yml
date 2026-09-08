@@ -1,0 +1,144 @@
+name: Reusable Mule Deployment
+
+on:
+  workflow_call:
+
+    inputs:
+
+      environment:
+        description: "Deployment environment"
+        required: true
+        type: string
+
+      run_id:
+        description: "CI workflow run ID"
+        required: true
+        type: string
+
+      artifact_name:
+        description: "GitHub Actions artifact name"
+        required: true
+        type: string
+
+    secrets:
+
+      ANYPOINT_CLIENT_ID:
+        required: true
+
+      ANYPOINT_CLIENT_SECRET:
+        required: true
+
+      ANYPOINT_ENVIRONMENT:
+        required: true
+
+      ANYPOINT_TARGET:
+        required: true
+
+      APPLICATION_NAME:
+        required: true
+
+
+jobs:
+
+  deploy:
+
+    name: Deploy to ${{ inputs.environment }}
+
+    runs-on: ubuntu-latest
+
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      contents: read
+      actions: read
+
+    steps:
+
+      - name: Checkout source
+        uses: actions/checkout@v5
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # --------------------------------
+      # Download application artifact
+      # --------------------------------
+      - name: Download application artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p target
+
+          gh run download \
+            "${{ inputs.run_id }}" \
+            --name "${{ inputs.artifact_name }}" \
+            --dir target
+
+      # --------------------------------
+      # Verify artifact
+      # --------------------------------
+      - name: Verify application artifact
+        shell: bash
+        run: |
+          artifact=$(find target \
+            -maxdepth 1 \
+            -type f \
+            -name "*.jar" |
+            head -1)
+
+          if [ -z "$artifact" ]; then
+            echo "ERROR: Mule application JAR not found."
+            exit 1
+          fi
+
+          echo "======================================"
+          echo "Environment:"
+          echo "${{ inputs.environment }}"
+          echo ""
+          echo "Application:"
+          echo "${{ secrets.APPLICATION_NAME }}"
+          echo ""
+          echo "Artifact:"
+          echo "$artifact"
+          echo "======================================"
+
+      # --------------------------------
+      # Deploy to CloudHub 2.0
+      # --------------------------------
+      - name: Deploy to CloudHub 2.0
+        shell: bash
+        run: |
+          artifact=$(find target \
+            -maxdepth 1 \
+            -type f \
+            -name "*.jar" |
+            head -1)
+
+          if [ -z "$artifact" ]; then
+            echo "ERROR: No Mule application JAR found."
+            exit 1
+          fi
+
+          echo "======================================"
+          echo "Deploying Mule application"
+          echo "======================================"
+          echo "Application: ${{ secrets.APPLICATION_NAME }}"
+          echo "Artifact:    $artifact"
+          echo "Environment: ${{ secrets.ANYPOINT_ENVIRONMENT }}"
+          echo "Target:      ${{ secrets.ANYPOINT_TARGET }}"
+          echo "======================================"
+
+          mvn -X --batch-mode \
+            --settings .maven/settings.xml \
+            mule:deploy \
+            -Dmule.artifact="$artifact" \
+            -DapplicationName="${{ secrets.APPLICATION_NAME }}" \
+            -Danypoint.environment="${{ secrets.ANYPOINT_ENVIRONMENT }}" \
+            -Danypoint.target="${{ secrets.ANYPOINT_TARGET }}" \
+            -DconnectedAppClientId="${{ secrets.ANYPOINT_CLIENT_ID }}" \
+            -DconnectedAppClientSecret="${{ secrets.ANYPOINT_CLIENT_SECRET }}" \
+            -DconnectedAppGrantType="client_credentials"
