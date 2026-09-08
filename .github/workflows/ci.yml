@@ -122,3 +122,59 @@ jobs:
       artifact_name: ${{ needs.build.outputs.artifact_name }}
 
     secrets: inherit
+
+  claude-check:
+
+    - name: Check ANTHROPIC_API_KEY
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        if [ -z "$ANTHROPIC_API_KEY" ]; then
+          echo "::error::ANTHROPIC_API_KEY is not configured in GitHub Secrets."
+          exit 1
+        fi
+
+        echo "ANTHROPIC_API_KEY is configured."
+
+    - name: Test Claude API
+      env:
+        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      run: |
+        RESPONSE=$(curl -sS \
+          -w "\n%{http_code}" \
+          https://api.anthropic.com/v1/messages \
+          -H "x-api-key: $ANTHROPIC_API_KEY" \
+          -H "anthropic-version: 2023-06-01" \
+          -H "content-type: application/json" \
+          -d '{
+            "model": "claude-sonnet-4-20250514",
+            "max_tokens": 100,
+            "messages": [
+              {
+                "role": "user",
+                "content": "Respon with exactly: Claude API"
+              }
+            ]
+          }')
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+        BODY=$(echo "$RESPONSE" | sed '$d')
+
+        echo "HTTP status: $HTTP_CODE"
+
+        if [ "$HTTP_CODE" -ne 200 ]; then
+          echo "::error::Claude API request failed."
+          echo "$BODY"
+          exit 1
+        fi
+
+        TEXT=$(echo "$BODY" | jq -r '.content[0].text // empty')
+
+        echo "Claude response: $TEXT"
+
+        if [ "$TEXT" != "Claude API" ]; then
+          echo "::error::Unexpected Claude API response. Expected exactly: Claude API"
+          exit 1
+        fi
+
+        echo "Claude API test passed successfully."
