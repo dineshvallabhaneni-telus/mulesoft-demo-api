@@ -132,6 +132,11 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    environment: DEV
+
+    permissions:
+      contents: read
+
     steps:
 
       - name: Check ANTHROPIC_API_KEY
