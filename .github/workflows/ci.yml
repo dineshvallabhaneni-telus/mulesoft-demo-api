@@ -156,11 +156,25 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         shell: bash
         run: |
+          set -euo pipefail
+
+          echo "Testing Claude API..."
+
           RESPONSE=$(curl -sS \
             -w "\n%{http_code}" \
-            https://api.fuelix.ai/v1/models \
+            --request POST \
+            https://api.fuelix.ai/v1/chat/completions \
             -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
-            -H "content-type: application/json")
+            -H "Content-Type: application/json" \
+            --data '{
+              "model": "claude-sonnet-4-6",
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "Reply with exactly: Claude API"
+                }
+              ]
+            }')
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
           BODY=$(echo "$RESPONSE" | sed '$d')
@@ -168,21 +182,33 @@ jobs:
           echo "HTTP status: $HTTP_CODE"
 
           if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "::error::Claude API request failed."
+            echo "::error::Claude API request failed with HTTP status $HTTP_CODE"
             echo "$BODY"
             exit 1
           fi
 
-          TEXT=$(echo "$BODY" | jq -r '.content[0].text // empty')
-
-          echo "Claude response: $TEXT"
-
-          if [ "$TEXT" != "Claude API" ]; then
-            echo "::error::Unexpected Claude API response. Expected exactly: Claude API"
+          if ! echo "$BODY" | jq empty >/dev/null 2>&1; then
+            echo "::error::Claude API returned invalid JSON."
             exit 1
           fi
 
+          CLAUDE_RESPONSE=$(echo "$BODY" | jq -r \
+            '.choices[0].message.content // empty')
+
+          echo "Claude response: $CLAUDE_RESPONSE"
+
+          if [ "$CLAUDE_RESPONSE" != "Claude API" ]; then
+            echo "::error::Unexpected Claude API response."
+            echo "::error::Expected: Claude API"
+            echo "::error::Received: $CLAUDE_RESPONSE"
+            exit 1
+          fi
+
+          MODEL=$(echo "$BODY" | jq -r '.model // "unknown"')
+
+          echo "Claude model: $MODEL"
           echo "Claude API test passed successfully."
+
 
       - name: Checkout Claude Prompts
         uses: actions/checkout@v5
@@ -192,22 +218,25 @@ jobs:
           path: dineshvallabhaneni-telus/mulesoft-claude-postman
           token: ${{ secrets.GIT_TOKEN }}
 
-      - name:
+      - name: Load Claude Prompt
         shell: bash
         run: |
-          echo "claude-repo"
-          ls -la claude-repo
-          echo "prompt file"
+          set -euo pipefail
 
-          if [! -f "claude-repo/Prompt/prompt.md"]; then
-            echo "ERROR: propmt.md not found"
+          echo "Claude repository:"
+          ls -la claude-repo
+
+          PROMPT_FILE="claude-repo/Prompts/prompt.md"
+
+          if [ ! -f "$PROMPT_FILE" ]; then
+            echo "::error::Prompt file not found: $PROMPT_FILE"
             exit 1
           fi
 
-          cat "claude-repo/Prompts/prompt.md"
+          echo "Prompt file found:"
+          ls -lh "$PROMPT_FILE"
 
-          echo ""
-          echo "Claude prompt loaded successfully"
+          echo "Claude prompt loaded successfully."
 
 
 
