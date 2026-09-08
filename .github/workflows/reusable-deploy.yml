@@ -132,7 +132,7 @@ jobs:
           echo "Target:      ${{ secrets.ANYPOINT_TARGET }}"
           echo "======================================"
 
-          mvn -X --batch-mode \
+          mvn --batch-mode \
             --settings .maven/settings.xml \
             mule:deploy \
             -Dmule.artifact="$artifact" \
