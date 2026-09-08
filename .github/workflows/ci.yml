@@ -194,3 +194,30 @@ jobs:
           fi
 
           echo "Claude API test passed successfully."
+
+      - name: Checkout Claude Prompts
+        uses: actions/checkout@v5
+        with:
+          repository: 
+          ref: main
+          path: dineshvallabhaneni-telus/mulesoft-claude-postman
+
+      - name:
+        shell: bash
+        run: |
+          echo "claude-repo"
+          ls -la claude-repo
+          echo "prompt file"
+
+          if [! -f "claude-repo/Prompt/prompt.md"]; then
+            echo "ERROR: propmt.md not found"
+            exit 1
+          fi
+
+          cat "claude-repo/Prompts/prompt.md"
+
+          echo ""
+          echo "Claude prompt loaded successfully"
+
+
+
