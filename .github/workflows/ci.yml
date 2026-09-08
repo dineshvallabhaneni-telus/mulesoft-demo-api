@@ -160,7 +160,7 @@ jobs:
             -w "\n%{http_code}" \
             https://api.fuelix.ai/v1/models \
             -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
-            -H "content-type: application/json" ')
+            -H "content-type: application/json")
 
           HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
           BODY=$(echo "$RESPONSE" | sed '$d')
