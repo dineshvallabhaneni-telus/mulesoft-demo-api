@@ -227,10 +227,13 @@ jobs:
           path: claude-repo
           token: ${{ secrets.GIT_TOKEN }}
 
-      - name: Show Workspace
+      - name: Verify workspace contract
         run: |
-          echo "Workspace $GITHUB_WORKSPACE"
-          find "$GITHUB_WORKSPACE" -maxdepth 3 
+          set -euo pipefail
+          test -d previous_ws || { echo "::error::previous_ws/ is missing"; exit 1; }
+          test -d postman_collection || { echo "::error::postman_collection/ is missing"; exit 1; }
+          echo "previous_ws:        $(find previous_ws -type f | wc -l) files"
+          echo "postman_collection: $(find postman_collection -type f | wc -l) files"
 
       - name: Load Claude Prompt
         shell: bash
@@ -252,5 +255,72 @@ jobs:
 
           echo "Claude prompt loaded successfully."
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet python-docx
+          npm install --global --silent newman
+
+      - name: Install Claude Code
+        run: npm install --global --silent @anthropic-ai/claude-code
+
+      - name: Run validation workflow
+        env:
+          ANTHROPIC_BASE_URL: https://api.fuelix.ai
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Set this if you want to force a particular Fuel model.
+          # ANTHROPIC_MODEL: <fuel-model-id>
+
+        run: |
+          claude -p "$(cat Prompt/prompt.md)" \
+            --permission-mode acceptEdits \
+            --allowedTools "Bash,Read,Write,Glob,Grep" \
+            --output-format text \
+            | tee validation-summary.txt
+
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## MuleSoft Deployment Validation"
+            echo ""
+            echo "Previous deployment ref: \`${PREVIOUS_DEPLOYMENT_REF:-unknown}\`"
+            echo ""
+            echo '```'
+            cat validation-summary.txt 2>/dev/null || echo "No summary produced."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload validation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mulesoft-validation-report
+          path: |
+            reports/*.docx
+            workspace/execution/*.json
+          # warn, not error, so a genuine validation failure is not masked by an
+          # artifact-upload failure when no report was produced.
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Fail the job on a failed validation
+        if: always()
+        run: |
+          set -euo pipefail
+          if ! grep -q '^Overall Status: PASS' validation-summary.txt; then
+            echo "::error::Validation did not pass. See the uploaded report."
+            exit 1
+          fi
 
 
