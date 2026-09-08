@@ -261,7 +261,7 @@ jobs:
 
       - uses: actions/setup-node@v7
         with:
-          node-version: '20'
+          node-version: '24'
 
       - name: Install dependencies
         run: |
@@ -271,6 +271,10 @@ jobs:
 
       - name: Install Claude Code
         run: npm install --global --silent @anthropic-ai/claude-code
+
+      - name: Print the file location
+        run: |
+          echo "File : $PROMPT_FILE"
 
       - name: Run validation workflow
         env:
@@ -282,7 +286,6 @@ jobs:
 
         run: |
           set -o pipefail
-
           cat "$PROMPT_FILE" | claude \
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
