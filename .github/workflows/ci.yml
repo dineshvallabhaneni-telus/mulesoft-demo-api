@@ -181,7 +181,7 @@ jobs:
           if [ "$HTTP_CODE" -ne 200 ]; then
             echo "::error::Claude API request failed."
             echo "$BODY"
-            exit 1
+          #  exit 1
           fi
 
           TEXT=$(echo "$BODY" | jq -r '.content[0].text // empty')

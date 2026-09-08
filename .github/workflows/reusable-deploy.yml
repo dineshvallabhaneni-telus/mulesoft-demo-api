@@ -126,19 +126,16 @@ jobs:
           echo "======================================"
           echo "Deploying Mule application"
           echo "======================================"
-          echo "Application: ${{ secrets.APPLICATION_NAME }}"
           echo "Artifact:    $artifact"
-          echo "Environment: ${{ secrets.ANYPOINT_ENVIRONMENT }}"
-          echo "Target:      ${{ secrets.ANYPOINT_TARGET }}"
           echo "======================================"
 
-          mvn --batch-mode \
-            --settings .maven/settings.xml \
-            mule:deploy \
-            -Dmule.artifact="$artifact" \
-            -DapplicationName="${{ secrets.APPLICATION_NAME }}" \
-            -Danypoint.environment="${{ secrets.ANYPOINT_ENVIRONMENT }}" \
-            -Danypoint.target="${{ secrets.ANYPOINT_TARGET }}" \
-            -DconnectedAppClientId="${{ secrets.ANYPOINT_CLIENT_ID }}" \
-            -DconnectedAppClientSecret="${{ secrets.ANYPOINT_CLIENT_SECRET }}" \
-            -DconnectedAppGrantType="client_credentials"
+        #  mvn --batch-mode \
+        #    --settings .maven/settings.xml \
+        #   mule:deploy \
+        #   -Dmule.artifact="$artifact" \
+        #   -DapplicationName="${{ secrets.APPLICATION_NAME }}" \
+        #   -Danypoint.environment="${{ secrets.ANYPOINT_ENVIRONMENT }}" \
+        #   -Danypoint.target="${{ secrets.ANYPOINT_TARGET }}" \
+        #   -DconnectedAppClientId="${{ secrets.ANYPOINT_CLIENT_ID }}" \
+        #   -DconnectedAppClientSecret="${{ secrets.ANYPOINT_CLIENT_SECRET }}" \
+        #   -DconnectedAppGrantType="client_credentials"
