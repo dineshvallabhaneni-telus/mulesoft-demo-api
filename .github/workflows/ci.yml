@@ -252,30 +252,6 @@ jobs:
           echo "previous_ws:        $(find previous_ws -type f | wc -l) files"
           echo "postman_collection: $(find postman_collection -type f | wc -l) files"
 
-      - name: Load Claude Prompt
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "Claude repository:"
-          ls -la claude-repo
-
-          PROMPT_FILE="claude-repo/Prompt/prompt.md"
-
-          if [ ! -f "$PROMPT_FILE" ]; then
-            echo "::error::Prompt file not found: $PROMPT_FILE"
-            exit 1
-          fi
-
-          echo "Prompt file found:"
-          ls -lh "$PROMPT_FILE"
-
-          echo "Claude prompt loaded successfully."
-
-      - name: Print the file location
-        run: |
-          echo "File : $PROMPT_FILE"
-
       - name: Run validation workflow
         env:
           ANTHROPIC_BASE_URL: https://api.fuelix.ai
@@ -286,7 +262,7 @@ jobs:
 
         run: |
           set -o pipefail
-          cat "$PROMPT_FILE" | claude \
+          cat "$GITHUB_WORKSPACE/claude-repo/Prompt/prompt.md" | claude \
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
             --output-format text \
