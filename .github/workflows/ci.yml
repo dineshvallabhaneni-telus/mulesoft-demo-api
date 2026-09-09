@@ -321,7 +321,6 @@ jobs:
       REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
       REVIEW_KIT_REF: main
       REVIEW_KIT_DIR: claude-repo
-      CLAUDE_MODEL: claude-opus-5
 
     steps:
 
@@ -353,64 +352,6 @@ jobs:
 
       - name: Install Claude Code
         run: npm install --global --silent @anthropic-ai/claude-code
-
-      - name: Test Claude API
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "Testing Claude API..."
-
-          RESPONSE=$(curl -sS \
-            -w "\n%{http_code}" \
-            --request POST \
-            https://api.fuelix.ai/v1/chat/completions \
-            -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
-            -H "Content-Type: application/json" \
-            --data '{
-              "model": "claude-sonnet-4-6",
-              "messages": [
-                {
-                  "role": "user",
-                  "content": "Reply with exactly: Claude API"
-                }
-              ]
-            }')
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-
-          echo "HTTP status: $HTTP_CODE"
-
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "::error::Claude API request failed with HTTP status $HTTP_CODE"
-            echo "$BODY"
-            exit 1
-          fi
-
-          if ! echo "$BODY" | jq empty >/dev/null 2>&1; then
-            echo "::error::Claude API returned invalid JSON."
-            exit 1
-          fi
-
-          CLAUDE_RESPONSE=$(echo "$BODY" | jq -r \
-            '.choices[0].message.content // empty')
-
-          echo "Claude response: $CLAUDE_RESPONSE"
-
-          if [ "$CLAUDE_RESPONSE" != "Claude API" ]; then
-            echo "::error::Unexpected Claude API response."
-            echo "::error::Expected: Claude API"
-            echo "::error::Received: $CLAUDE_RESPONSE"
-            exit 1
-          fi
-
-          MODEL=$(echo "$BODY" | jq -r '.model // "unknown"')
-
-          echo "Claude model: $MODEL"
-          echo "Claude API test passed successfully."
 
       - name: Checkout source
         uses: actions/checkout@v5
@@ -460,7 +401,11 @@ jobs:
 
       - name: Run MuleSoft code review
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          ANTHROPIC_BASE_URL: https://api.fuelix.ai
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Set this if you want to force a particular Fuel model.
+          # ANTHROPIC_MODEL: <fuel-model-id>
         run: |
           set -euo pipefail
           cat "$GITHUB_WORKSPACE/claude-repo/prompts/review-prompt.md" | claude \
