@@ -454,58 +454,36 @@ jobs:
             echo
             echo "---"
             echo
-            cat "${REVIEW_KIT_DIR}/prompts/mule-full-review.md"
-          } > "${RUNNER_TEMP}/review-prompt.md"
-          wc -l "${RUNNER_TEMP}/review-prompt.md"
+            cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md"
+          } > "$GITHUB_WORKSPACE/claude-repo/prompts/review-prompt.md"
+          wc -l "$GITHUB_WORKSPACE/claude-repo/prompts/review-prompt.md"
 
       - name: Run MuleSoft code review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -euo pipefail
-          claude \
-            --print \
-            #--model "${CLAUDE_MODEL}" \
+          cat "$GITHUB_WORKSPACE/claude-repo/prompts/review-prompt.md" | claude \
             --permission-mode acceptEdits \
-            --allowedTools "Read,Grep,Glob,Bash" \
-            < "${RUNNER_TEMP}/review-prompt.md" \
-            | tee "${RUNNER_TEMP}/review-summary.md"
+            --allowedTools "Bash,Read,Write,Glob,Grep" \
+            --output-format text \
+            | tee "$GITHUB_WORKSPACE/claude-repo/reports/review-summary.txt"
 
-      - name: Verify the Word document was generated
+
+      - name: Fail the job on a failed validation
+        if: always()
         run: |
           set -euo pipefail
-          shopt -s nullglob
-          reports=(reports/*.docx)
-
-          if [ ${#reports[@]} -eq 0 ]; then
-            echo "::error::No Word report was generated in reports/."
+          if ! grep -q '^Overall Status: PASS' validation-summary.txt; then
+            echo "::error::Validation did not pass. See the uploaded report."
             exit 1
-          fi
-          if [ ${#reports[@]} -gt 1 ]; then
-            echo "::error::Expected a single review document, found ${#reports[@]}:"
-            printf '  %s\n' "${reports[@]}"
-            exit 1
-          fi
-          if [ ! -s "${reports[0]}" ]; then
-            echo "::error::${reports[0]} is empty."
-            exit 1
-          fi
-
-          ls -l "${reports[0]}"
-          echo "REVIEW_DOC=${reports[0]}" >> "${GITHUB_ENV}"
-          echo "### Review document: \`${reports[0]}\`" >> "${GITHUB_STEP_SUMMARY}"
-
-          # The review is read-only: nothing but the report may have changed.
-          if [ -n "$(git status --porcelain -- . ':!reports/')" ]; then
-            echo "::warning::The review modified files other than the report:"
-            git status --porcelain -- . ':!reports/'
           fi
 
       - name: Publish the review summary to the job summary
         if: always()
         run: |
-          if [ -s "${RUNNER_TEMP}/review-summary.md" ]; then
-            cat "${RUNNER_TEMP}/review-summary.md" >> "${GITHUB_STEP_SUMMARY}"
+          if [ -s ""$GITHUB_WORKSPACE/claude-repo/reports/review-summary.txt" ]; then
+            cat "$GITHUB_WORKSPACE/claude-repo/reports/review-summary.txt" >> "${GITHUB_STEP_SUMMARY}"
           fi
 
       - name: Upload the Word review report
