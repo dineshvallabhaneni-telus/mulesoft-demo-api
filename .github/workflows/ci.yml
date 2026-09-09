@@ -366,39 +366,6 @@ jobs:
           path: ${{ env.REVIEW_KIT_DIR }}
           token: ${{ secrets.GIT_TOKEN }}
 
-      - name: Build the review prompt
-        run: |
-          set -euo pipefail
-          {
-            echo "The MuleSoft application under review is this repository root."
-            echo
-            echo "The review kit is checked out at: ${REVIEW_KIT_DIR}"
-            echo
-            echo "Resolve every review-kit path referenced below under that"
-            echo "directory, for example:"
-            echo "  ${REVIEW_KIT_DIR}/CLAUDE.md"
-            echo "  ${REVIEW_KIT_DIR}/review.md"
-            echo "  ${REVIEW_KIT_DIR}/finding-taxonomy.md"
-            echo "  ${REVIEW_KIT_DIR}/.claude/skills/mule-code-review/SKILL.md"
-            echo "  ${REVIEW_KIT_DIR}/.claude/skills/mule-code-review/references/"
-            echo "  ${REVIEW_KIT_DIR}/scripts/generate_report.py"
-            echo
-            echo "SKILL.md and every references/*.md live under"
-            echo "  ${REVIEW_KIT_DIR}/.claude/skills/mule-code-review/"
-            echo "and NOT at the kit root. In particular, read"
-            echo "  ${REVIEW_KIT_DIR}/.claude/skills/mule-code-review/references/review-report-schema.md"
-            echo "before writing the PHASE 19 JSON. Do not guess the schema."
-            echo
-            echo "Do not review or report findings against review-kit files."
-            echo "Write the single timestamped Word report into the reports/"
-            echo "folder at the repository root."
-            echo
-            echo "---"
-            echo
-            cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md"
-          } > "$GITHUB_WORKSPACE/claude-repo/prompts/review-prompt.md"
-          wc -l "$GITHUB_WORKSPACE/claude-repo/prompts/review-prompt.md"
-
       - name: Run MuleSoft code review
         env:
           ANTHROPIC_BASE_URL: https://api.fuelix.ai
@@ -408,20 +375,12 @@ jobs:
           # ANTHROPIC_MODEL: <fuel-model-id>
         run: |
           set -euo pipefail
-          cat "$GITHUB_WORKSPACE/claude-repo/prompts/review-prompt.md" | claude \
+          cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md" | claude \
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
             --output-format text \
             | tee review-summary.txt
 
-      - name: Fail the job on a failed validation
-        if: always()
-        run: |
-          set -euo pipefail
-          if ! grep -q '^Overall Status: PASS' review-summary.txt; then
-            echo "::error::Validation did not pass. See the uploaded report."
-            exit 1
-          fi
       - name: Publish summary
         if: always()
         run: |
@@ -440,3 +399,12 @@ jobs:
           path: reports/*.docx
           if-no-files-found: error
           retention-days: 30
+
+      - name: Fail the job on a failed validation
+        if: always()
+        run: |
+          set -euo pipefail
+          if ! grep -q '^Overall Status: PASS' review-summary.txt; then
+            echo "::error::Validation did not pass. See the uploaded report."
+            exit 1
+          fi
