@@ -467,24 +467,25 @@ jobs:
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
             --output-format text \
-            | tee "$GITHUB_WORKSPACE/claude-repo/reports/review-summary.txt"
-
+            | tee review-summary.txt
 
       - name: Fail the job on a failed validation
         if: always()
         run: |
           set -euo pipefail
-          if ! grep -q '^Overall Status: PASS' validation-summary.txt; then
+          if ! grep -q '^Overall Status: PASS' review-summary.txt; then
             echo "::error::Validation did not pass. See the uploaded report."
             exit 1
           fi
-
-      - name: Publish the review summary to the job summary
+      - name: Publish summary
         if: always()
         run: |
-          if [ -s ""$GITHUB_WORKSPACE/claude-repo/reports/review-summary.txt" ]; then
-            cat "$GITHUB_WORKSPACE/claude-repo/reports/review-summary.txt" >> "${GITHUB_STEP_SUMMARY}"
-          fi
+          {
+            echo "## MuleSoft Code Review"
+            echo ""
+            cat review-summary.txt 2>/dev/null || echo "No summary produced."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the Word review report
         if: always()
