@@ -429,7 +429,7 @@ jobs:
 
         run: |
           set -o pipefail
-          cat "$GITHUB_WORKSPACE/claude-repo/Prompts/mule-full-review.md" | claude \
+          cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md" | claude \
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
             --output-format text \
