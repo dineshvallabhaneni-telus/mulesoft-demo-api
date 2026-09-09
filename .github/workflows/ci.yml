@@ -303,9 +303,9 @@ jobs:
             echo "::error::Validation did not pass. See the uploaded report."
             exit 1
           fi
-  mulesoft-code-review:
+  muleSoft-code-review:
 
-    name: Muleosoft Code Review
+    name: MuleSoft Code Review
 
     needs:
       - build
@@ -465,7 +465,7 @@ jobs:
           set -euo pipefail
           claude \
             --print \
-            --model "${CLAUDE_MODEL}" \
+            #--model "${CLAUDE_MODEL}" \
             --permission-mode acceptEdits \
             --allowedTools "Read,Grep,Glob,Bash" \
             < "${RUNNER_TEMP}/review-prompt.md" \
@@ -510,7 +510,7 @@ jobs:
 
       - name: Upload the Word review report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: mulesoft-code-review-${{ github.sha }}
           path: reports/*.docx
