@@ -317,6 +317,12 @@ jobs:
     permissions:
       contents: read
 
+    env:
+      REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
+      REVIEW_KIT_REF: main
+      REVIEW_KIT_DIR: claude-repo
+      CLAUDE_MODEL: claude-opus-5
+
     steps:
 
       - name: Check ANTHROPIC_API_KEY
@@ -414,9 +420,9 @@ jobs:
       - name: Checkout review kit
         uses: actions/checkout@v5
         with:
-          repository: dineshvallabhaneni-telus/mulesoft-claude-code-review
-          ref: main
-          path: claude-repo
+          repository: ${{ env.REVIEW_KIT_REPO }}
+          ref: ${{ env.REVIEW_KIT_REF }}
+          path: ${{ env.REVIEW_KIT_DIR }}
           token: ${{ secrets.GIT_TOKEN }}
 
       - name: Build the review prompt
@@ -425,16 +431,22 @@ jobs:
           {
             echo "The MuleSoft application under review is this repository root."
             echo
-            echo "The review kit is checked out at: $GITHUB_WORKSPACE/claude-repo"
+            echo "The review kit is checked out at: ${REVIEW_KIT_DIR}"
             echo
             echo "Resolve every review-kit path referenced below under that"
             echo "directory, for example:"
-            echo "  $GITHUB_WORKSPACE/claude-repo/CLAUDE.md"
-            echo "  $GITHUB_WORKSPACE/claude-repo/review.md"
-            echo "  $GITHUB_WORKSPACE/claude-repo/finding-taxonomy.md"
-            echo "  $GITHUB_WORKSPACE/claude-repo/.claude/skills/mule-code-review/SKILL.md"
-            echo "  $GITHUB_WORKSPACE/claude-repo/.claude/skills/mule-code-review/references/"
-            echo "  $GITHUB_WORKSPACE/claude-repo/scripts/generate_report.py"
+            echo "  ${REVIEW_KIT_DIR}/CLAUDE.md"
+            echo "  ${REVIEW_KIT_DIR}/review.md"
+            echo "  ${REVIEW_KIT_DIR}/finding-taxonomy.md"
+            echo "  ${REVIEW_KIT_DIR}/.claude/skills/mule-code-review/SKILL.md"
+            echo "  ${REVIEW_KIT_DIR}/.claude/skills/mule-code-review/references/"
+            echo "  ${REVIEW_KIT_DIR}/scripts/generate_report.py"
+            echo
+            echo "SKILL.md and every references/*.md live under"
+            echo "  ${REVIEW_KIT_DIR}/.claude/skills/mule-code-review/"
+            echo "and NOT at the kit root. In particular, read"
+            echo "  ${REVIEW_KIT_DIR}/.claude/skills/mule-code-review/references/review-report-schema.md"
+            echo "before writing the PHASE 19 JSON. Do not guess the schema."
             echo
             echo "Do not review or report findings against review-kit files."
             echo "Write the single timestamped Word report into the reports/"
@@ -442,9 +454,9 @@ jobs:
             echo
             echo "---"
             echo
-            cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md"
-          } > "$GITHUB_WORKSPACE/reports/review-prompt.md"
-          wc -l "$GITHUB_WORKSPACE/reports/review-prompt.md"
+            cat "${REVIEW_KIT_DIR}/prompts/mule-full-review.md"
+          } > "${RUNNER_TEMP}/review-prompt.md"
+          wc -l "${RUNNER_TEMP}/review-prompt.md"
 
       - name: Run MuleSoft code review
         env:
@@ -453,11 +465,11 @@ jobs:
           set -euo pipefail
           claude \
             --print \
-           ## --model "${CLAUDE_MODEL}" \
+            --model "${CLAUDE_MODEL}" \
             --permission-mode acceptEdits \
             --allowedTools "Read,Grep,Glob,Bash" \
-            "$(cat "$GITHUB_WORKSPACE/reports/review-prompt.md")" \
-            | tee "$GITHUB_WORKSPACE/reports/review-summary.md"
+            "$(cat "${RUNNER_TEMP}/review-prompt.md")" \
+            | tee "${RUNNER_TEMP}/review-summary.md"
 
       - name: Verify the Word document was generated
         run: |
@@ -492,16 +504,15 @@ jobs:
       - name: Publish the review summary to the job summary
         if: always()
         run: |
-          if [ -s "$GITHUB_WORKSPACE/reports/review-summary.md" ]; then
-            cat "$GITHUB_WORKSPACE/reports/review-summary.md" >> "${GITHUB_STEP_SUMMARY}"
+          if [ -s "${RUNNER_TEMP}/review-summary.md" ]; then
+            cat "${RUNNER_TEMP}/review-summary.md" >> "${GITHUB_STEP_SUMMARY}"
           fi
 
       - name: Upload the Word review report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: mulesoft-code-review-${{ github.sha }}
           path: reports/*.docx
           if-no-files-found: error
           retention-days: 30
-
