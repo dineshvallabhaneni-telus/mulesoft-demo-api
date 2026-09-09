@@ -468,7 +468,7 @@ jobs:
             --model "${CLAUDE_MODEL}" \
             --permission-mode acceptEdits \
             --allowedTools "Read,Grep,Glob,Bash" \
-            "$(cat "${RUNNER_TEMP}/review-prompt.md")" \
+            < "${RUNNER_TEMP}/review-prompt.md" \
             | tee "${RUNNER_TEMP}/review-summary.md"
 
       - name: Verify the Word document was generated
