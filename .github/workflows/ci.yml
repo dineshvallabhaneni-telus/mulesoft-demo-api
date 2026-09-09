@@ -303,5 +303,168 @@ jobs:
             echo "::error::Validation did not pass. See the uploaded report."
             exit 1
           fi
+  mulesoft-code-review:
 
+    name: Muleosoft Code Review
+
+    needs:
+      - build
+
+    runs-on: ubuntu-latest
+
+    environment: DEV
+
+    permissions:
+      contents: read
+
+    steps:
+
+      - name: Check ANTHROPIC_API_KEY
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        shell: bash
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY is not configured in GitHub Secrets."
+            exit 1
+          fi
+
+          echo "ANTHROPIC_API_KEY is configured."
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --quiet --upgrade pip
+          python3 -m pip install --quiet python-docx
+          npm install --global --silent newman
+
+      - name: Install Claude Code
+        run: npm install --global --silent @anthropic-ai/claude-code
+
+      - name: Test Claude API
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "Testing Claude API..."
+
+          RESPONSE=$(curl -sS \
+            -w "\n%{http_code}" \
+            --request POST \
+            https://api.fuelix.ai/v1/chat/completions \
+            -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
+            -H "Content-Type: application/json" \
+            --data '{
+              "model": "claude-sonnet-4-6",
+              "messages": [
+                {
+                  "role": "user",
+                  "content": "Reply with exactly: Claude API"
+                }
+              ]
+            }')
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "HTTP status: $HTTP_CODE"
+
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "::error::Claude API request failed with HTTP status $HTTP_CODE"
+            echo "$BODY"
+            exit 1
+          fi
+
+          if ! echo "$BODY" | jq empty >/dev/null 2>&1; then
+            echo "::error::Claude API returned invalid JSON."
+            exit 1
+          fi
+
+          CLAUDE_RESPONSE=$(echo "$BODY" | jq -r \
+            '.choices[0].message.content // empty')
+
+          echo "Claude response: $CLAUDE_RESPONSE"
+
+          if [ "$CLAUDE_RESPONSE" != "Claude API" ]; then
+            echo "::error::Unexpected Claude API response."
+            echo "::error::Expected: Claude API"
+            echo "::error::Received: $CLAUDE_RESPONSE"
+            exit 1
+          fi
+
+          MODEL=$(echo "$BODY" | jq -r '.model // "unknown"')
+
+          echo "Claude model: $MODEL"
+          echo "Claude API test passed successfully."
+
+      - name: Checkout source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Checkout Claude Muleosft Prompts
+        uses: actions/checkout@v5
+        with:
+          repository: dineshvallabhaneni-telus/mulesoft-claude-code-review
+          ref: main
+          path: claude-repo
+          token: ${{ secrets.GIT_TOKEN }}
+
+      - name: Run validation workflow
+        env:
+          ANTHROPIC_BASE_URL: https://api.fuelix.ai
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Set this if you want to force a particular Fuel model.
+          # ANTHROPIC_MODEL: <fuel-model-id>
+
+        run: |
+          set -o pipefail
+          cat "$GITHUB_WORKSPACE/claude-repo/Prompts/mule-full-review.md" | claude \
+            --permission-mode acceptEdits \
+            --allowedTools "Bash,Read,Write,Glob,Grep" \
+            --output-format text \
+            | tee review-summary.txt
+
+
+      - name: Publish summary
+        if: always()
+        run: |
+          {
+            echo "## MuleSoft Code Review Validation"
+            echo ""
+            echo '```'
+            cat review-summary.txt 2>/dev/null || echo "No summary produced."
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload review report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mulesoft-review-report
+          path: |
+            reports/*.docx
+          # warn, not error, so a genuine validation failure is not masked by an
+          # artifact-upload failure when no report was produced.
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Fail the job on a failed validation
+        if: always()
+        run: |
+          set -euo pipefail
+          if ! grep -q '^Overall Status: PASS' review-summary.txt; then
+            echo "::error::Validation did not pass. See the uploaded report."
+            exit 1
+          fi
 
