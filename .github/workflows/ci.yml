@@ -411,7 +411,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Checkout Claude Muleosft Prompts
+      - name: Checkout review kit
         uses: actions/checkout@v5
         with:
           repository: dineshvallabhaneni-telus/mulesoft-claude-code-review
@@ -419,52 +419,89 @@ jobs:
           path: claude-repo
           token: ${{ secrets.GIT_TOKEN }}
 
-      - name: Run validation workflow
-        env:
-          ANTHROPIC_BASE_URL: https://api.fuelix.ai
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
-
-          # Set this if you want to force a particular Fuel model.
-          # ANTHROPIC_MODEL: <fuel-model-id>
-
+      - name: Build the review prompt
         run: |
-          set -o pipefail
-          cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md" | claude \
+          set -euo pipefail
+          {
+            echo "The MuleSoft application under review is this repository root."
+            echo
+            echo "The review kit is checked out at: $GITHUB_WORKSPACE/claude-repo"
+            echo
+            echo "Resolve every review-kit path referenced below under that"
+            echo "directory, for example:"
+            echo "  $GITHUB_WORKSPACE/claude-repo/CLAUDE.md"
+            echo "  $GITHUB_WORKSPACE/claude-repo/review.md"
+            echo "  $GITHUB_WORKSPACE/claude-repo/finding-taxonomy.md"
+            echo "  $GITHUB_WORKSPACE/claude-repo/.claude/skills/mule-code-review/SKILL.md"
+            echo "  $GITHUB_WORKSPACE/claude-repo/.claude/skills/mule-code-review/references/"
+            echo "  $GITHUB_WORKSPACE/claude-repo/scripts/generate_report.py"
+            echo
+            echo "Do not review or report findings against review-kit files."
+            echo "Write the single timestamped Word report into the reports/"
+            echo "folder at the repository root."
+            echo
+            echo "---"
+            echo
+            cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md"
+          } > "$GITHUB_WORKSPACE/reports/review-prompt.md"
+          wc -l "$GITHUB_WORKSPACE/reports/review-prompt.md"
+
+      - name: Run MuleSoft code review
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          set -euo pipefail
+          claude \
+            --print \
+           ## --model "${CLAUDE_MODEL}" \
             --permission-mode acceptEdits \
-            --allowedTools "Bash,Read,Write,Glob,Grep" \
-            --output-format text \
-            | tee review-summary.txt
+            --allowedTools "Read,Grep,Glob,Bash" \
+            "$(cat "$GITHUB_WORKSPACE/reports/review-prompt.md")" \
+            | tee "$GITHUB_WORKSPACE/reports/review-summary.md"
 
+      - name: Verify the Word document was generated
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          reports=(reports/*.docx)
 
-      - name: Publish summary
+          if [ ${#reports[@]} -eq 0 ]; then
+            echo "::error::No Word report was generated in reports/."
+            exit 1
+          fi
+          if [ ${#reports[@]} -gt 1 ]; then
+            echo "::error::Expected a single review document, found ${#reports[@]}:"
+            printf '  %s\n' "${reports[@]}"
+            exit 1
+          fi
+          if [ ! -s "${reports[0]}" ]; then
+            echo "::error::${reports[0]} is empty."
+            exit 1
+          fi
+
+          ls -l "${reports[0]}"
+          echo "REVIEW_DOC=${reports[0]}" >> "${GITHUB_ENV}"
+          echo "### Review document: \`${reports[0]}\`" >> "${GITHUB_STEP_SUMMARY}"
+
+          # The review is read-only: nothing but the report may have changed.
+          if [ -n "$(git status --porcelain -- . ':!reports/')" ]; then
+            echo "::warning::The review modified files other than the report:"
+            git status --porcelain -- . ':!reports/'
+          fi
+
+      - name: Publish the review summary to the job summary
         if: always()
         run: |
-          {
-            echo "## MuleSoft Code Review Validation"
-            echo ""
-            echo '```'
-            cat review-summary.txt 2>/dev/null || echo "No summary produced."
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+          if [ -s "$GITHUB_WORKSPACE/reports/review-summary.md" ]; then
+            cat "$GITHUB_WORKSPACE/reports/review-summary.md" >> "${GITHUB_STEP_SUMMARY}"
+          fi
 
-      - name: Upload review report
+      - name: Upload the Word review report
         if: always()
         uses: actions/upload-artifact@v7
         with:
-          name: mulesoft-review-report
-          path: |
-            reports/*.docx
-          # warn, not error, so a genuine validation failure is not masked by an
-          # artifact-upload failure when no report was produced.
-          if-no-files-found: warn
-          retention-days: 90
-
-      - name: Fail the job on a failed validation
-        if: always()
-        run: |
-          set -euo pipefail
-          if ! grep -q '^Overall Status: PASS' review-summary.txt; then
-            echo "::error::Validation did not pass. See the uploaded report."
-            exit 1
-          fi
+          name: mulesoft-code-review-${{ github.sha }}
+          path: reports/*.docx
+          if-no-files-found: error
+          retention-days: 30
 
