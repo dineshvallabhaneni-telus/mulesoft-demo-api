@@ -167,19 +167,20 @@ jobs:
           APPLICATION_ROOT: ${{ github.workspace }}
           REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review-kit
 
-        shell: bash
         run: |
           set -euo pipefail
 
-          cd "$APPLICATION_ROOT"
+          echo "Application root: $APPLICATION_ROOT"
+          echo "Review kit root: $REVIEW_KIT_ROOT"
 
+          rm -rf "$APPLICATION_ROOT/workspace/execution"
           mkdir -p "$APPLICATION_ROOT/workspace/execution"
           mkdir -p "$APPLICATION_ROOT/reports"
 
+          test -f "$REVIEW_KIT_ROOT/CLAUDE.md"
+          test -f "$REVIEW_KIT_ROOT/prompts/mule-code-review-prompt.md"
+
           echo "Review workspace prepared."
-          echo
-          echo "Execution: $APPLICATION_ROOT/workspace/execution"
-          echo "Reports:   $APPLICATION_ROOT/reports"
 
       # ------------------------------------------------------------
       #  Collect deterministic repository evidence
@@ -254,13 +255,22 @@ jobs:
         run: |
           set -euo pipefail
 
+          echo "Application root:"
+          echo " $APPLICATION_ROOT"
+
+          echo "Review kit root:"
+          echo " $REVIEW_KIT_ROOT"
+
+          echo "Review output:"
+          echo "$APPLICATION_ROOT/workspace/execution/review.json"
+
           echo "Starting MuleSoft code review..."
 
           cat "$REVIEW_KIT_ROOT/prompts/mule-code-review.md" | claude \
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
             --output-format text \
-            | tee workspace/execution/review-summary.txt
+            | tee "$APPLICATION_ROOT/workspace/execution/review-summary.txt"
 
           echo "MuleSoft code review completed."
 
