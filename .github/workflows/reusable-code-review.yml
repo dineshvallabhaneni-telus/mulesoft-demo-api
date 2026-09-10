@@ -177,7 +177,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          python scripts/discover_application.py
+          python "$GITHUB_WORKSPACE/.mule-code-review-kit/scripts/discover_application.py"
 
           if [ ! -f "workspace/execution/application-discovery.json" ]; then
             echo "ERROR: Application discovery did not produce output."
@@ -192,7 +192,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          python scripts/collect_review_evidence.py
+          python "$GITHUB_WORKSPACE/.mule-code-review-kit/scripts/collect_review_evidence.py"
 
           if [ ! -f "workspace/execution/review-evidence.json" ]; then
             echo "ERROR: Review evidence was not generated."
