@@ -236,98 +236,372 @@ jobs:
           echo "Execution Evidence:"
           echo "$APPLICATION_ROOT/workspace/execution"
 
-      # # ==========================================================
-      # # RUN MULESOFT CODE REVIEW
-      # # ==========================================================
+      # ==========================================================
+      # RUN MULESOFT CODE REVIEW
+      # ==========================================================
 
-      # - name: Run MuleSoft code review
-      #   env:
-      #     ANTHROPIC_BASE_URL: https://api.fuelix.ai
-      #     ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
-      #     APPLICATION_ROOT: ${{ github.workspace }}
-      #     REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review-kit
-      #     # Optional:
-      #     # ANTHROPIC_MODEL: <fuel-model-id>
+      - name: Run MuleSoft code review
+        env:
+          ANTHROPIC_BASE_URL: https://api.fuelix.ai
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+          APPLICATION_ROOT: ${{ github.workspace }}
+          REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review-kit
+          # Optional:
+          # ANTHROPIC_MODEL: <fuel-model-id>
 
-      #   shell: bash
+        shell: bash
 
-      #   run: |
-      #     set -euo pipefail
+        run: |
+          set -euo pipefail
 
-      #     echo "Starting MuleSoft code review..."
+          echo "Starting MuleSoft code review..."
 
-      #     cat "$REVIEW_KIT_ROOT/prompts/mule-full-review.md" | claude \
-      #       --permission-mode acceptEdits \
-      #       --allowedTools "Bash,Read,Write,Glob,Grep" \
-      #       --output-format text \
-      #       | tee review-summary.txt
+          cat "$REVIEW_KIT_ROOT/prompts/mule-full-review.md" | claude \
+            --permission-mode acceptEdits \
+            --allowedTools "Bash,Read,Write,Glob,Grep" \
+            --output-format text \
+            | tee workspace/execution/review-summary.txt
 
-      #     echo "MuleSoft code review completed."
-
-
-      # # ==========================================================
-      # # PUBLISH GITHUB SUMMARY
-      # # ==========================================================
-
-      # - name: Publish summary
-      #   if: always()
-
-      #   shell: bash
-
-      #   run: |
-      #     {
-      #       echo "## MuleSoft Code Review"
-      #       echo ""
-
-      #       cat review-summary.txt 2>/dev/null || echo "No summary produced."
-
-      #       echo ""
-      #       echo '```'
-
-      #     } >> "$GITHUB_STEP_SUMMARY"
+          echo "MuleSoft code review completed."
 
 
-      # # ==========================================================
-      # # UPLOAD REVIEW REPORT
-      # # ==========================================================
+      # ------------------------------------------------------------
+      # Verify Claude output
+      # ------------------------------------------------------------
+      - name: Verify review output
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      # - name: Upload Word review report
-      #   if: always()
+          REVIEW_FILE="workspace/execution/review.json"
 
-      #   uses: actions/upload-artifact@v7
+          if [ ! -f "$REVIEW_FILE" ]; then
+            echo "ERROR: Claude did not create $REVIEW_FILE"
+            exit 1
+          fi
 
-      #   with:
-      #     name: mulesoft-code-review-${{ github.sha }}
+          if [ ! -s "$REVIEW_FILE" ]; then
+            echo "ERROR: $REVIEW_FILE is empty."
+            exit 1
+          fi
 
-      #     path: reports/*.docx
+          python - <<'PY'
+          import json
+          from pathlib import Path
 
-      #     if-no-files-found: error
+          path = Path("workspace/execution/review.json")
 
-      #     retention-days: 30
+          try:
+              data = json.loads(
+                  path.read_text(encoding="utf-8")
+              )
+          except Exception as exc:
+              raise SystemExit(
+                  f"review.json contains invalid JSON: {exc}"
+              )
 
+          if not isinstance(data, dict):
+              raise SystemExit(
+                  "review.json must contain a JSON object."
+              )
 
-      # # ==========================================================
-      # # VALIDATE REVIEW RESULT
-      # # ==========================================================
+          findings = data.get("findings", [])
 
-      # - name: Fail the job on a failed review
-      #   if: always()
+          if not isinstance(findings, list):
+              raise SystemExit(
+                  "review.json 'findings' must be an array."
+              )
 
-      #   shell: bash
+          print("review.json validation passed.")
+          print(f"Finding count: {len(findings)}")
+          PY
 
-      #   run: |
-      #     set -euo pipefail
+      # ------------------------------------------------------------
+      # Validate structured review
+      # ------------------------------------------------------------
+      - name: Validate review
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      #     if [ ! -f review-summary.txt ]; then
-      #       echo "::error::Code review summary was not generated."
-      #       exit 1
-      #     fi
+          python scripts/validate_review.py
 
-      #     if ! grep -q '^Overall Status: PASS' review-summary.txt; then
-      #       echo "::error::MuleSoft code review did not pass."
-      #       echo "::error::See the uploaded review report."
+          if [ ! -f "workspace/execution/validated-review.json" ]; then
+            echo "ERROR: validated-review.json was not generated."
+            exit 1
+          fi
 
-      #       exit 1
-      #     fi
+      # ------------------------------------------------------------
+      # Generate official Word report
+      # ------------------------------------------------------------
+      - name: Generate Word report
+        shell: bash
+        run: |
+          set -euo pipefail
 
-      #     echo "MuleSoft code review passed successfully."
+          python scripts/generate_report.py
+
+      # ------------------------------------------------------------
+      # Validate generated Word document
+      # ------------------------------------------------------------
+      - name: Validate generated report
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          from pathlib import Path
+
+          from docx import Document
+
+          reports = list(
+              Path("reports").glob(
+                  "CODE_REVIEW_REPORT_*.docx"
+              )
+          )
+
+          if len(reports) != 1:
+              raise SystemExit(
+                  "Expected exactly one final Word report; "
+                  f"found {len(reports)}."
+              )
+
+          report = reports[0]
+
+          if report.stat().st_size == 0:
+              raise SystemExit(
+                  "Generated Word report is empty."
+              )
+
+          document = Document(report)
+
+          paragraphs = "\n".join(
+              paragraph.text
+              for paragraph in document.paragraphs
+          )
+
+          required_sections = [
+              "CODE REVIEW REPORT",
+              "1. EXECUTIVE SUMMARY",
+              "2. APPLICATION INVENTORY",
+              "3. FINDINGS",
+              "4. CATEGORY ASSESSMENTS",
+              "5. PRODUCTION READINESS ASSESSMENT",
+              "6. RISK AND RECOMMENDATION",
+              "APPENDIX A",
+              "APPENDIX B",
+              "APPENDIX C",
+          ]
+
+          missing = [
+              section
+              for section in required_sections
+              if section not in paragraphs
+          ]
+
+          if missing:
+              raise SystemExit(
+                  "Generated report is missing required sections: "
+                  + ", ".join(missing)
+              )
+
+          print(f"Report validated successfully: {report}")
+          PY
+
+      # ------------------------------------------------------------
+      # Verify application source integrity
+      #
+      # workspace/ and reports/ are generated review artifacts.
+      # Any other modification is a failure.
+      # ------------------------------------------------------------
+      - name: Verify source integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git status --short \
+            > workspace/execution/git-status-after.txt
+
+          git diff --binary \
+            > workspace/execution/git-diff-after.patch
+
+          git diff --cached --binary \
+            > workspace/execution/git-diff-cached-after.patch
+
+          python - <<'PY'
+          import subprocess
+
+          generated_prefixes = (
+              "workspace/",
+              "reports/",
+          )
+
+          result = subprocess.run(
+              ["git", "status", "--short"],
+              capture_output=True,
+              text=True,
+              check=True,
+          )
+
+          unexpected = []
+
+          for line in result.stdout.splitlines():
+              if not line.strip():
+                  continue
+
+              path = line[3:].strip()
+
+              if path.startswith(generated_prefixes):
+                  continue
+
+              unexpected.append(line)
+
+          if unexpected:
+              print(
+                  "Unexpected repository modifications detected:"
+              )
+
+              for item in unexpected:
+                  print(item)
+
+              raise SystemExit(
+                  "Application source integrity check failed."
+              )
+
+          working_tree = subprocess.run(
+              ["git", "diff", "--exit-code"],
+              check=False,
+          )
+
+          if working_tree.returncode != 0:
+              raise SystemExit(
+                  "Uncommitted application source changes detected."
+              )
+
+          staged = subprocess.run(
+              ["git", "diff", "--cached", "--exit-code"],
+              check=False,
+          )
+
+          if staged.returncode != 0:
+              raise SystemExit(
+                  "Staged application source changes detected."
+              )
+
+          print(
+              "Application source integrity confirmed."
+          )
+          PY
+
+      # ------------------------------------------------------------
+      # Print final review result
+      # ------------------------------------------------------------
+      - name: Display review result
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path(
+              "workspace/execution/validated-review.json"
+          )
+
+          review = json.loads(
+              path.read_text(encoding="utf-8")
+          )
+
+          findings = review.get("findings", [])
+
+          counts = {
+              severity: sum(
+                  1
+                  for finding in findings
+                  if finding.get("severity") == severity
+              )
+              for severity in (
+                  "CRITICAL",
+                  "HIGH",
+                  "MEDIUM",
+                  "LOW",
+                  "NIT",
+              )
+          }
+
+          report_files = list(
+              Path("reports").glob(
+                  "CODE_REVIEW_REPORT_*.docx"
+              )
+          )
+
+          report = (
+              str(report_files[0])
+              if len(report_files) == 1
+              else "Not generated"
+          )
+
+          print("")
+          print("========================================")
+          print("MuleSoft Code Review")
+          print("========================================")
+          print(
+              f"Overall Risk:       "
+              f"{review.get('overallRisk', 'LOW')}"
+          )
+          print(
+              f"Recommendation:     "
+              f"{review.get('overallRecommendation', 'APPROVE')}"
+          )
+          print(
+              f"CRITICAL:           {counts['CRITICAL']}"
+          )
+          print(
+              f"HIGH:               {counts['HIGH']}"
+          )
+          print(
+              f"MEDIUM:             {counts['MEDIUM']}"
+          )
+          print(
+              f"LOW:                {counts['LOW']}"
+          )
+          print(
+              f"NIT:                {counts['NIT']}"
+          )
+          print(
+              f"TOTAL:              {len(findings)}"
+          )
+          print(
+              f"Report:             {report}"
+          )
+          print("========================================")
+          PY
+
+      # ------------------------------------------------------------
+      # 17. Upload official Word report
+      # ------------------------------------------------------------
+      - name: Upload review report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mule-code-review-report
+          path: reports/CODE_REVIEW_REPORT_*.docx
+          if-no-files-found: error
+
+      # ------------------------------------------------------------
+      # 18. Upload execution evidence
+      #
+      # These are workflow artifacts, not official review reports.
+      # ------------------------------------------------------------
+      - name: Upload review execution evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mule-code-review-execution
+          path: |
+            workspace/execution/application-discovery.json
+            workspace/execution/review-evidence.json
+            workspace/execution/review.json
+            workspace/execution/validated-review.json
+          if-no-files-found: warn
