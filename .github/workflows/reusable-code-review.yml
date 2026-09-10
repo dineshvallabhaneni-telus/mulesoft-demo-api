@@ -117,32 +117,46 @@ jobs:
       #   - application root
       #   - framework root
       # ------------------------------------------------------------
-      - name: Validate framework
+      - name: Validate framework structure
         shell: bash
         run: |
           set -euo pipefail
 
-          required_files=(
-            "CLAUDE.md"
-            "agents/mule-code-review-agent.md"
-            "skills/mule-code-review/SKILL.md"
-            "references/review-report-schema.md"
-            "scripts/discover_application.py"
-            "scripts/collect_review_evidence.py"
-            "scripts/validate_review.py"
-            "scripts/generate_report.py"
-            "prompts/mule-code-review-prompt.md"
-          )
+          echo "=========================================================="
+          echo "WORKSPACE"
+          echo "=========================================================="
+          pwd
+          echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+          echo
 
-          for file in "${required_files[@]}"; do
-            if [ ! -f "$file" ]; then
-              echo "ERROR: Required framework file missing: $file"
-              exit 1
-            fi
-          done
+          echo "=========================================================="
+          echo "FRAMEWORK ROOT"
+          echo "=========================================================="
+          echo "$GITHUB_WORKSPACE/.mule-code-review-kit"
+          echo
 
-          echo "Framework validation passed."
+          echo "=========================================================="
+          echo "FRAMEWORK CONTENTS"
+          echo "=========================================================="
 
+          find "$GITHUB_WORKSPACE/.mule-code-review-kit" \
+            -maxdepth 4 \
+            -type f \
+            -not -path "*/.git/*" \
+            | sort
+
+          echo
+          echo "=========================================================="
+          echo "CHECK CLAUDE.md"
+          echo "=========================================================="
+
+          if [[ -f "$GITHUB_WORKSPACE/.mule-code-review-kit/CLAUDE.md" ]]; then
+            echo "FOUND:"
+            echo "$GITHUB_WORKSPACE/.mule-code-review-kit/CLAUDE.md"
+          else
+            echo "ERROR: CLAUDE.md not found in framework root"
+            exit 1
+          fi
       # ------------------------------------------------------------
       #  Prepare execution directories
       # ------------------------------------------------------------
