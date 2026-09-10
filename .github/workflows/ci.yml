@@ -15,6 +15,10 @@ concurrency:
 
 jobs:
 
+  # ============================================================
+  # BUILD
+  # ============================================================
+
   build:
     name: Build Mule Application
 
@@ -22,6 +26,12 @@ jobs:
 
     secrets: inherit
 
+
+  # ============================================================
+  # DEPLOY TO DEV
+  #
+  # Runs after BUILD
+  # ============================================================
 
   deploy-dev:
     name: Deploy ${{ needs.build.outputs.version }} to DEV
@@ -39,6 +49,12 @@ jobs:
     secrets: inherit
 
 
+  # ============================================================
+  # TEST RESULTS
+  #
+  # Runs after DEPLOY DEV
+  # ============================================================
+
   test-results:
     name: Test Results
 
@@ -49,6 +65,16 @@ jobs:
 
     secrets: inherit
 
+
+  # ============================================================
+  # CODE REVIEW
+  #
+  # Runs after BUILD
+  #
+  # IMPORTANT:
+  # This is independent of deployment and test results.
+  # Therefore it runs in parallel with DEPLOY DEV.
+  # ============================================================
 
   mulesoft-code-review:
     name: MuleSoft Code Review
