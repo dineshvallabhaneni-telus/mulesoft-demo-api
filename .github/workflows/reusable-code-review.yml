@@ -23,7 +23,7 @@ jobs:
     env:
       REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
       REVIEW_KIT_REF: develop
-      REVIEW_KIT_DIR: /
+      REVIEW_KIT_DIR: Reviewframework
 
     steps:
 
