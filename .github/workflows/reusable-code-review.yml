@@ -24,6 +24,8 @@ jobs:
       REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
       REVIEW_KIT_REF: develop
       REVIEW_KIT_DIR: .mule-code-review-kit
+      APPLICATION_ROOT: ${{ github.workspace }}
+      REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review-kit
 
     steps:
 
@@ -89,7 +91,7 @@ jobs:
 
 
       # ==========================================================
-      # CHECKOUT MULE APPLICATION
+      # CHECKOUT Mule Application
       # ==========================================================
 
       - name: Checkout source
@@ -99,7 +101,7 @@ jobs:
 
 
       # ==========================================================
-      # CHECKOUT CODE REVIEW KIT
+      # CHECKOUT Review Framework
       # ==========================================================
 
       - name: Checkout review kit
@@ -110,7 +112,7 @@ jobs:
           path: ${{ env.REVIEW_KIT_DIR }}
           token: ${{ secrets.GIT_TOKEN }}
 
-# ------------------------------------------------------------
+      # ------------------------------------------------------------
       # Validate framework structure
       #
       # The repository root is both:
@@ -158,64 +160,81 @@ jobs:
             exit 1
           fi
       # ------------------------------------------------------------
-      #  Prepare execution directories
+      #  Prepare review workspace
       # ------------------------------------------------------------
       - name: Prepare review workspace
+        env: 
+          APPLICATION_ROOT: ${{ github.workspace }}
+          REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review-kit
+
         shell: bash
         run: |
           set -euo pipefail
 
-          rm -rf workspace/execution
-          mkdir -p workspace/execution
-          mkdir -p reports
+          cd "$APPLICATION_ROOT"
 
-      # ------------------------------------------------------------
-      # Discover Mule application
-      # ------------------------------------------------------------
-      - name: Discover Mule application
-        shell: bash
-        run: |
-          set -euo pipefail
+          mkdir -p "$APPLICATION_ROOT/workspace/execution"
+          mkdir -p "$APPLICATION_ROOT/reports"
 
-          python "$GITHUB_WORKSPACE/.mule-code-review-kit/scripts/discover_application.py"
-
-          if [ ! -f "workspace/execution/application-discovery.json" ]; then
-            echo "ERROR: Application discovery did not produce output."
-            exit 1
-          fi
+          echo "Review workspace prepared."
+          echo
+          echo "Execution: $APPLICATION_ROOT/workspace/execution"
+          echo "Reports:   $APPLICATION_ROOT/reports"
 
       # ------------------------------------------------------------
       #  Collect deterministic repository evidence
       # ------------------------------------------------------------
       - name: Collect review evidence
+        env:
+          APPLICATION_ROOT: ${{ github.workspace }}
+          REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review-kit
+
         shell: bash
+
         run: |
           set -euo pipefail
 
-          python "$GITHUB_WORKSPACE/.mule-code-review-kit/scripts/collect_review_evidence.py"
+          cd "$APPLICATION_ROOT"
 
-          if [ ! -f "workspace/execution/review-evidence.json" ]; then
-            echo "ERROR: Review evidence was not generated."
-            exit 1
-          fi
+          python3 "$REVIEW_KIT_ROOT/scripts/collect_review_evidence.py"
+
+          test -f "$APPLICATION_ROOT/workspace/execution/review-evidence.json"
+
+          echo "Evidence output:"
+          echo "$APPLICATION_ROOT/workspace/execution/review-evidence.json"
 
       # ------------------------------------------------------------
       #  Capture repository state before Claude
       # ------------------------------------------------------------
       - name: Capture source state
+        env:
+          APPLICATION_ROOT: ${{ github.workspace }}
+
         shell: bash
+
         run: |
           set -euo pipefail
 
+          cd "$APPLICATION_ROOT"
+
+          mkdir -p "$APPLICATION_ROOT/workspace/execution"
+
           git status --short \
-            > workspace/execution/git-status-before.txt
+            > "$APPLICATION_ROOT/workspace/execution/git-status-before.txt"
 
           git diff --binary \
-            > workspace/execution/git-diff-before.patch
+            > "$APPLICATION_ROOT/workspace/execution/git-diff-before.patch"
 
           git diff --cached --binary \
-            > workspace/execution/git-diff-cached-before.patch 
+            > "$APPLICATION_ROOT/workspace/execution/git-diff-cached-before.patch"
 
+          echo "Repository state captured."
+          echo
+          echo "Application Root:"
+          echo "$APPLICATION_ROOT"
+          echo
+          echo "Execution Evidence:"
+          echo "$APPLICATION_ROOT/workspace/execution"
 
       # # ==========================================================
       # # RUN MULESOFT CODE REVIEW
