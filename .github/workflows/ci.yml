@@ -13,12 +13,7 @@ concurrency:
   group: mule-ci-develop
   cancel-in-progress: false
 
-
 jobs:
-
-  # ============================================================
-  # 1. BUILD
-  # ============================================================
 
   build:
     name: Build Mule Application
@@ -27,12 +22,6 @@ jobs:
 
     secrets: inherit
 
-
-  # ============================================================
-  # 2. DEPLOY TO DEV
-  #
-  # Starts after BUILD succeeds
-  # ============================================================
 
   deploy-dev:
     name: Deploy ${{ needs.build.outputs.version }} to DEV
@@ -50,12 +39,6 @@ jobs:
     secrets: inherit
 
 
-  # ============================================================
-  # 3. TEST RESULTS
-  #
-  # Starts ONLY after DEV deployment succeeds
-  # ============================================================
-
   test-results:
     name: Test Results
 
@@ -66,18 +49,6 @@ jobs:
 
     secrets: inherit
 
-
-  # ============================================================
-  # 4. CODE REVIEW
-  #
-  # Starts after BUILD succeeds.
-  #
-  # This runs IN PARALLEL with:
-  #   - DEV deployment
-  #   - Test Results
-  #
-  # It does NOT depend on deploy-dev.
-  # ============================================================
 
   mulesoft-code-review:
     name: MuleSoft Code Review

@@ -3,6 +3,10 @@ name: Reusable Mule Deployment
 on:
   workflow_call:
 
+    # ============================================================
+    # INPUTS
+    # ============================================================
+
     inputs:
 
       environment:
@@ -11,7 +15,7 @@ on:
         type: string
 
       run_id:
-        description: "CI workflow run ID"
+        description: "CI workflow run ID containing the artifact"
         required: true
         type: string
 
@@ -19,6 +23,11 @@ on:
         description: "GitHub Actions artifact name"
         required: true
         type: string
+
+
+    # ============================================================
+    # SECRETS
+    # ============================================================
 
     secrets:
 
@@ -38,6 +47,10 @@ on:
         required: true
 
 
+# =================================================================
+# JOBS
+# =================================================================
+
 jobs:
 
   deploy:
@@ -52,38 +65,68 @@ jobs:
       contents: read
       actions: read
 
+
     steps:
+
+      # ==========================================================
+      # CHECKOUT SOURCE
+      # ==========================================================
 
       - name: Checkout source
         uses: actions/checkout@v5
+
+
+      # ==========================================================
+      # SETUP JAVA
+      # ==========================================================
 
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
+          cache: maven
 
-      # --------------------------------
-      # Download application artifact
-      # --------------------------------
+
+      # ==========================================================
+      # DOWNLOAD BUILD ARTIFACT
+      # ==========================================================
+
       - name: Download application artifact
+
         env:
           GH_TOKEN: ${{ github.token }}
+
         shell: bash
+
         run: |
+
+          set -euo pipefail
+
           mkdir -p target
+
+          echo "Downloading artifact..."
 
           gh run download \
             "${{ inputs.run_id }}" \
             --name "${{ inputs.artifact_name }}" \
             --dir target
 
-      # --------------------------------
-      # Verify artifact
-      # --------------------------------
+          echo "Artifact downloaded successfully."
+
+
+      # ==========================================================
+      # VERIFY ARTIFACT
+      # ==========================================================
+
       - name: Verify application artifact
+
         shell: bash
+
         run: |
+
+          set -euo pipefail
+
           artifact=$(find target \
             -maxdepth 1 \
             -type f \
@@ -91,10 +134,12 @@ jobs:
             head -1)
 
           if [ -z "$artifact" ]; then
-            echo "ERROR: Mule application JAR not found."
+            echo "::error::Mule application JAR not found."
             exit 1
           fi
 
+          echo "======================================"
+          echo "Deployment Information"
           echo "======================================"
           echo "Environment:"
           echo "${{ inputs.environment }}"
@@ -106,12 +151,19 @@ jobs:
           echo "$artifact"
           echo "======================================"
 
-      # --------------------------------
-      # Deploy to CloudHub 2.0
-      # --------------------------------
+
+      # ==========================================================
+      # DEPLOY TO CLOUDHUB 2.0
+      # ==========================================================
+
       - name: Deploy to CloudHub 2.0
+
         shell: bash
+
         run: |
+
+          set -euo pipefail
+
           artifact=$(find target \
             -maxdepth 1 \
             -type f \
@@ -119,23 +171,29 @@ jobs:
             head -1)
 
           if [ -z "$artifact" ]; then
-            echo "ERROR: No Mule application JAR found."
+            echo "::error::No Mule application JAR found."
             exit 1
           fi
 
           echo "======================================"
-          echo "Deploying Mule application"
+          echo "Deploying Mule Application"
           echo "======================================"
-          echo "Artifact:    $artifact"
+          echo "Environment:  ${{ inputs.environment }}"
+          echo "Application:  ${{ secrets.APPLICATION_NAME }}"
+          echo "Artifact:     $artifact"
           echo "======================================"
 
-        #  mvn --batch-mode \
-        #    --settings .maven/settings.xml \
-        #   mule:deploy \
-        #   -Dmule.artifact="$artifact" \
-        #   -DapplicationName="${{ secrets.APPLICATION_NAME }}" \
-        #   -Danypoint.environment="${{ secrets.ANYPOINT_ENVIRONMENT }}" \
-        #   -Danypoint.target="${{ secrets.ANYPOINT_TARGET }}" \
-        #   -DconnectedAppClientId="${{ secrets.ANYPOINT_CLIENT_ID }}" \
-        #   -DconnectedAppClientSecret="${{ secrets.ANYPOINT_CLIENT_SECRET }}" \
-        #   -DconnectedAppGrantType="client_credentials"
+          mvn --batch-mode \
+            --settings .maven/settings.xml \
+            mule:deploy \
+            -Dmule.artifact="$artifact" \
+            -DapplicationName="${{ secrets.APPLICATION_NAME }}" \
+            -Danypoint.environment="${{ secrets.ANYPOINT_ENVIRONMENT }}" \
+            -Danypoint.target="${{ secrets.ANYPOINT_TARGET }}" \
+            -DconnectedAppClientId="${{ secrets.ANYPOINT_CLIENT_ID }}" \
+            -DconnectedAppClientSecret="${{ secrets.ANYPOINT_CLIENT_SECRET }}" \
+            -DconnectedAppGrantType="client_credentials"
+
+          echo "======================================"
+          echo "Deployment completed successfully."
+          echo "======================================"
