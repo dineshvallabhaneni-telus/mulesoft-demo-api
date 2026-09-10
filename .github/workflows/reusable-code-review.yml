@@ -22,8 +22,8 @@ jobs:
 
     env:
       REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
-      REVIEW_KIT_REF: main
-      REVIEW_KIT_DIR: claude-repo
+      REVIEW_KIT_REF: develop
+      REVIEW_KIT_DIR: /
 
     steps:
 
@@ -110,98 +110,102 @@ jobs:
           path: ${{ env.REVIEW_KIT_DIR }}
           token: ${{ secrets.GIT_TOKEN }}
 
-
-      # ==========================================================
-      # RUN MULESOFT CODE REVIEW
-      # ==========================================================
-
-      - name: Run MuleSoft code review
-        env:
-          ANTHROPIC_BASE_URL: https://api.fuelix.ai
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
-
-          # Optional:
-          # ANTHROPIC_MODEL: <fuel-model-id>
-
-        shell: bash
-
+      - name: List review kit files
         run: |
-          set -euo pipefail
+          echo "Listing files in the review kit directory:"
+          ls -R ${{ env.REVIEW_KIT_DIR }}
+        
+      # # ==========================================================
+      # # RUN MULESOFT CODE REVIEW
+      # # ==========================================================
 
-          echo "Starting MuleSoft code review..."
+      # - name: Run MuleSoft code review
+      #   env:
+      #     ANTHROPIC_BASE_URL: https://api.fuelix.ai
+      #     ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
 
-          cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md" | claude \
-            --permission-mode acceptEdits \
-            --allowedTools "Bash,Read,Write,Glob,Grep" \
-            --output-format text \
-            | tee review-summary.txt
+      #     # Optional:
+      #     # ANTHROPIC_MODEL: <fuel-model-id>
 
-          echo "MuleSoft code review completed."
+      #   shell: bash
 
+      #   run: |
+      #     set -euo pipefail
 
-      # ==========================================================
-      # PUBLISH GITHUB SUMMARY
-      # ==========================================================
+      #     echo "Starting MuleSoft code review..."
 
-      - name: Publish summary
-        if: always()
+      #     cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md" | claude \
+      #       --permission-mode acceptEdits \
+      #       --allowedTools "Bash,Read,Write,Glob,Grep" \
+      #       --output-format text \
+      #       | tee review-summary.txt
 
-        shell: bash
-
-        run: |
-          {
-            echo "## MuleSoft Code Review"
-            echo ""
-
-            cat review-summary.txt 2>/dev/null || echo "No summary produced."
-
-            echo ""
-            echo '```'
-
-          } >> "$GITHUB_STEP_SUMMARY"
+      #     echo "MuleSoft code review completed."
 
 
-      # ==========================================================
-      # UPLOAD REVIEW REPORT
-      # ==========================================================
+      # # ==========================================================
+      # # PUBLISH GITHUB SUMMARY
+      # # ==========================================================
 
-      - name: Upload Word review report
-        if: always()
+      # - name: Publish summary
+      #   if: always()
 
-        uses: actions/upload-artifact@v7
+      #   shell: bash
 
-        with:
-          name: mulesoft-code-review-${{ github.sha }}
+      #   run: |
+      #     {
+      #       echo "## MuleSoft Code Review"
+      #       echo ""
 
-          path: reports/*.docx
+      #       cat review-summary.txt 2>/dev/null || echo "No summary produced."
 
-          if-no-files-found: error
+      #       echo ""
+      #       echo '```'
 
-          retention-days: 30
+      #     } >> "$GITHUB_STEP_SUMMARY"
 
 
-      # ==========================================================
-      # VALIDATE REVIEW RESULT
-      # ==========================================================
+      # # ==========================================================
+      # # UPLOAD REVIEW REPORT
+      # # ==========================================================
 
-      - name: Fail the job on a failed review
-        if: always()
+      # - name: Upload Word review report
+      #   if: always()
 
-        shell: bash
+      #   uses: actions/upload-artifact@v7
 
-        run: |
-          set -euo pipefail
+      #   with:
+      #     name: mulesoft-code-review-${{ github.sha }}
 
-          if [ ! -f review-summary.txt ]; then
-            echo "::error::Code review summary was not generated."
-            exit 1
-          fi
+      #     path: reports/*.docx
 
-          if ! grep -q '^Overall Status: PASS' review-summary.txt; then
-            echo "::error::MuleSoft code review did not pass."
-            echo "::error::See the uploaded review report."
+      #     if-no-files-found: error
 
-            exit 1
-          fi
+      #     retention-days: 30
 
-          echo "MuleSoft code review passed successfully."
+
+      # # ==========================================================
+      # # VALIDATE REVIEW RESULT
+      # # ==========================================================
+
+      # - name: Fail the job on a failed review
+      #   if: always()
+
+      #   shell: bash
+
+      #   run: |
+      #     set -euo pipefail
+
+      #     if [ ! -f review-summary.txt ]; then
+      #       echo "::error::Code review summary was not generated."
+      #       exit 1
+      #     fi
+
+      #     if ! grep -q '^Overall Status: PASS' review-summary.txt; then
+      #       echo "::error::MuleSoft code review did not pass."
+      #       echo "::error::See the uploaded review report."
+
+      #       exit 1
+      #     fi
+
+      #     echo "MuleSoft code review passed successfully."
