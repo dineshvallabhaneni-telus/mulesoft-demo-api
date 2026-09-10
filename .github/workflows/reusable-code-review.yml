@@ -23,7 +23,7 @@ jobs:
     env:
       REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
       REVIEW_KIT_REF: develop
-      REVIEW_KIT_DIR: Reviewframework
+      REVIEW_KIT_DIR: .mule-code-review-kit
 
     steps:
 
@@ -110,11 +110,99 @@ jobs:
           path: ${{ env.REVIEW_KIT_DIR }}
           token: ${{ secrets.GIT_TOKEN }}
 
-      - name: List review kit files
+# ------------------------------------------------------------
+      # Validate framework structure
+      #
+      # The repository root is both:
+      #   - application root
+      #   - framework root
+      # ------------------------------------------------------------
+      - name: Validate framework
+        shell: bash
         run: |
-          echo "Listing files in the review kit directory:"
-          ls -R ${{ env.REVIEW_KIT_DIR }}
-        
+          set -euo pipefail
+
+          required_files=(
+            "CLAUDE.md"
+            "agents/mule-code-review-agent.md"
+            "skills/mule-code-review/SKILL.md"
+            "references/review-report-schema.md"
+            "scripts/discover_application.py"
+            "scripts/collect_review_evidence.py"
+            "scripts/validate_review.py"
+            "scripts/generate_report.py"
+            "prompts/mule-code-review-prompt.md"
+          )
+
+          for file in "${required_files[@]}"; do
+            if [ ! -f "$file" ]; then
+              echo "ERROR: Required framework file missing: $file"
+              exit 1
+            fi
+          done
+
+          echo "Framework validation passed."
+
+      # ------------------------------------------------------------
+      #  Prepare execution directories
+      # ------------------------------------------------------------
+      - name: Prepare review workspace
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf workspace/execution
+          mkdir -p workspace/execution
+          mkdir -p reports
+
+      # ------------------------------------------------------------
+      # Discover Mule application
+      # ------------------------------------------------------------
+      - name: Discover Mule application
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python scripts/discover_application.py
+
+          if [ ! -f "workspace/execution/application-discovery.json" ]; then
+            echo "ERROR: Application discovery did not produce output."
+            exit 1
+          fi
+
+      # ------------------------------------------------------------
+      #  Collect deterministic repository evidence
+      # ------------------------------------------------------------
+      - name: Collect review evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python scripts/collect_review_evidence.py
+
+          if [ ! -f "workspace/execution/review-evidence.json" ]; then
+            echo "ERROR: Review evidence was not generated."
+            exit 1
+          fi
+
+      # ------------------------------------------------------------
+      #  Capture repository state before Claude
+      # ------------------------------------------------------------
+      - name: Capture source state
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git status --short \
+            > workspace/execution/git-status-before.txt
+
+          git diff --binary \
+            > workspace/execution/git-diff-before.patch
+
+          git diff --cached --binary \
+            > workspace/execution/git-diff-cached-before.patch 
+
+
       # # ==========================================================
       # # RUN MULESOFT CODE REVIEW
       # # ==========================================================
@@ -123,7 +211,8 @@ jobs:
       #   env:
       #     ANTHROPIC_BASE_URL: https://api.fuelix.ai
       #     ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
-
+      #     APPLICATION_ROOT: ${{ github.workspace }}
+      #     REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review-kit
       #     # Optional:
       #     # ANTHROPIC_MODEL: <fuel-model-id>
 
@@ -134,7 +223,7 @@ jobs:
 
       #     echo "Starting MuleSoft code review..."
 
-      #     cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md" | claude \
+      #     cat "$REVIEW_KIT_ROOT/prompts/mule-full-review.md" | claude \
       #       --permission-mode acceptEdits \
       #       --allowedTools "Bash,Read,Write,Glob,Grep" \
       #       --output-format text \
