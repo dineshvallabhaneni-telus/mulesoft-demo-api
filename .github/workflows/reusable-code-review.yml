@@ -1,0 +1,207 @@
+name: Reusable - MuleSoft Code Review
+
+on:
+  workflow_call:
+
+
+jobs:
+
+  # ============================================================
+  # MULESOFT CODE REVIEW
+  # ============================================================
+
+  code-review:
+    name: MuleSoft Code Review
+
+    runs-on: ubuntu-latest
+
+    environment: DEV
+
+    permissions:
+      contents: read
+
+    env:
+      REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
+      REVIEW_KIT_REF: main
+      REVIEW_KIT_DIR: claude-repo
+
+    steps:
+
+      # ==========================================================
+      # CHECK ANTHROPIC API KEY
+      # ==========================================================
+
+      - name: Check ANTHROPIC_API_KEY
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+        shell: bash
+
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::ANTHROPIC_API_KEY is not configured in GitHub Secrets."
+            exit 1
+          fi
+
+          echo "ANTHROPIC_API_KEY is configured."
+
+
+      # ==========================================================
+      # SETUP PYTHON
+      # ==========================================================
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+
+      # ==========================================================
+      # SETUP NODE
+      # ==========================================================
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+
+      # ==========================================================
+      # INSTALL DEPENDENCIES
+      # ==========================================================
+
+      - name: Install dependencies
+        run: |
+          python3 -m pip install --quiet --upgrade pip
+
+          python3 -m pip install --quiet python-docx
+
+          npm install --global --silent newman
+
+
+      # ==========================================================
+      # INSTALL CLAUDE CODE
+      # ==========================================================
+
+      - name: Install Claude Code
+        run: |
+          npm install --global --silent @anthropic-ai/claude-code
+
+
+      # ==========================================================
+      # CHECKOUT MULE APPLICATION
+      # ==========================================================
+
+      - name: Checkout source
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+
+      # ==========================================================
+      # CHECKOUT CODE REVIEW KIT
+      # ==========================================================
+
+      - name: Checkout review kit
+        uses: actions/checkout@v5
+        with:
+          repository: ${{ env.REVIEW_KIT_REPO }}
+          ref: ${{ env.REVIEW_KIT_REF }}
+          path: ${{ env.REVIEW_KIT_DIR }}
+          token: ${{ secrets.GIT_TOKEN }}
+
+
+      # ==========================================================
+      # RUN MULESOFT CODE REVIEW
+      # ==========================================================
+
+      - name: Run MuleSoft code review
+        env:
+          ANTHROPIC_BASE_URL: https://api.fuelix.ai
+          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+
+          # Optional:
+          # ANTHROPIC_MODEL: <fuel-model-id>
+
+        shell: bash
+
+        run: |
+          set -euo pipefail
+
+          echo "Starting MuleSoft code review..."
+
+          cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md" | claude \
+            --permission-mode acceptEdits \
+            --allowedTools "Bash,Read,Write,Glob,Grep" \
+            --output-format text \
+            | tee review-summary.txt
+
+          echo "MuleSoft code review completed."
+
+
+      # ==========================================================
+      # PUBLISH GITHUB SUMMARY
+      # ==========================================================
+
+      - name: Publish summary
+        if: always()
+
+        shell: bash
+
+        run: |
+          {
+            echo "## MuleSoft Code Review"
+            echo ""
+
+            cat review-summary.txt 2>/dev/null || echo "No summary produced."
+
+            echo ""
+            echo '```'
+
+          } >> "$GITHUB_STEP_SUMMARY"
+
+
+      # ==========================================================
+      # UPLOAD REVIEW REPORT
+      # ==========================================================
+
+      - name: Upload Word review report
+        if: always()
+
+        uses: actions/upload-artifact@v7
+
+        with:
+          name: mulesoft-code-review-${{ github.sha }}
+
+          path: reports/*.docx
+
+          if-no-files-found: error
+
+          retention-days: 30
+
+
+      # ==========================================================
+      # VALIDATE REVIEW RESULT
+      # ==========================================================
+
+      - name: Fail the job on a failed review
+        if: always()
+
+        shell: bash
+
+        run: |
+          set -euo pipefail
+
+          if [ ! -f review-summary.txt ]; then
+            echo "::error::Code review summary was not generated."
+            exit 1
+          fi
+
+          if ! grep -q '^Overall Status: PASS' review-summary.txt; then
+            echo "::error::MuleSoft code review did not pass."
+            echo "::error::See the uploaded review report."
+
+            exit 1
+          fi
+
+          echo "MuleSoft code review passed successfully."

@@ -13,102 +13,28 @@ concurrency:
   group: mule-ci-develop
   cancel-in-progress: false
 
+
 jobs:
 
-  build:
+  # ============================================================
+  # 1. BUILD
+  # ============================================================
 
+  build:
     name: Build Mule Application
 
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/reusable-build.yml
 
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      artifact_name: ${{ steps.artifact.outputs.artifact_name }}
-      artifact_id: ${{ steps.upload.outputs.artifact-id }}
+    secrets: inherit
 
-    steps:
 
-      - name: Checkout source
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '17'
-          cache: maven
-
-      - name: Calculate version
-        id: version
-        shell: bash
-        run: |
-          VERSION="1.0.${GITHUB_RUN_NUMBER}"
-
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-          echo "Version: $VERSION"
-
-      - name: Build with Maven
-        run: |
-          mvn --batch-mode \
-            --settings .maven/settings.xml \
-            clean package \
-            -Drevision="${{ steps.version.outputs.version }}" \
-            -DskipMunitTests
-
-      - name: Stamp artifact file name
-        id: artifact
-        shell: bash
-        run: |
-          artifactPath=$(find target \
-            -maxdepth 1 \
-            -type f \
-            -name "*.jar" |
-            head -1)
-
-          if [ -z "$artifactPath" ]; then
-            echo "ERROR: No JAR found."
-            exit 1
-          fi
-
-          artifactFile=$(basename "$artifactPath")
-
-          # Remove .jar
-          baseName="${artifactFile%.jar}"
-
-          # Remove Mule application suffix
-          baseName="${baseName%-mule-application}"
-
-          commitHash=$(git rev-parse --short "$GITHUB_SHA")
-          branchName="${GITHUB_REF_NAME}"
-
-          artifactName="${baseName}-${branchName}-${commitHash}.jar"
-
-          mv "$artifactPath" "target/$artifactName"
-
-          echo "======================================"
-          echo "Original artifact:"
-          echo "$artifactPath"
-          echo ""
-          echo "Final artifact:"
-          echo "target/$artifactName"
-          echo "======================================"
-
-          echo "artifact_name=$artifactName" >> "$GITHUB_OUTPUT"
-
-      - name: Upload application artifact
-        id: upload
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ steps.artifact.outputs.artifact_name }}
-          path: target/${{ steps.artifact.outputs.artifact_name }}
-          if-no-files-found: error
-          retention-days: 30
+  # ============================================================
+  # 2. DEPLOY TO DEV
+  #
+  # Starts after BUILD succeeds
+  # ============================================================
 
   deploy-dev:
-
     name: Deploy ${{ needs.build.outputs.version }} to DEV
 
     needs:
@@ -123,288 +49,42 @@ jobs:
 
     secrets: inherit
 
-  claude-check:
 
-    name: Check Claude API
+  # ============================================================
+  # 3. TEST RESULTS
+  #
+  # Starts ONLY after DEV deployment succeeds
+  # ============================================================
+
+  test-results:
+    name: Test Results
 
     needs:
-      - build
+      - deploy-dev
 
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/reusable-test-results.yml
 
-    environment: DEV
-
-    permissions:
-      contents: read
-
-    steps:
-
-      - name: Check ANTHROPIC_API_KEY
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        shell: bash
-        run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::error::ANTHROPIC_API_KEY is not configured in GitHub Secrets."
-            exit 1
-          fi
-
-          echo "ANTHROPIC_API_KEY is configured."
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-
-      - name: Install dependencies
-        run: |
-          python3 -m pip install --quiet --upgrade pip
-          python3 -m pip install --quiet python-docx
-          npm install --global --silent newman
-
-      - name: Install Claude Code
-        run: npm install --global --silent @anthropic-ai/claude-code
-
-      - name: Test Claude API
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "Testing Claude API..."
-
-          RESPONSE=$(curl -sS \
-            -w "\n%{http_code}" \
-            --request POST \
-            https://api.fuelix.ai/v1/chat/completions \
-            -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
-            -H "Content-Type: application/json" \
-            --data '{
-              "model": "claude-sonnet-4-6",
-              "messages": [
-                {
-                  "role": "user",
-                  "content": "Reply with exactly: Claude API"
-                }
-              ]
-            }')
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-
-          echo "HTTP status: $HTTP_CODE"
-
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "::error::Claude API request failed with HTTP status $HTTP_CODE"
-            echo "$BODY"
-            exit 1
-          fi
-
-          if ! echo "$BODY" | jq empty >/dev/null 2>&1; then
-            echo "::error::Claude API returned invalid JSON."
-            exit 1
-          fi
-
-          CLAUDE_RESPONSE=$(echo "$BODY" | jq -r \
-            '.choices[0].message.content // empty')
-
-          echo "Claude response: $CLAUDE_RESPONSE"
-
-          if [ "$CLAUDE_RESPONSE" != "Claude API" ]; then
-            echo "::error::Unexpected Claude API response."
-            echo "::error::Expected: Claude API"
-            echo "::error::Received: $CLAUDE_RESPONSE"
-            exit 1
-          fi
-
-          MODEL=$(echo "$BODY" | jq -r '.model // "unknown"')
-
-          echo "Claude model: $MODEL"
-          echo "Claude API test passed successfully."
-
-      - name: Checkout source
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Checkout Previouse source
-        run: |
-          mkdir previous_ws
-          git worktree add previous_ws HEAD~1
-
-      - name: Checkout Claude Prompts
-        uses: actions/checkout@v5
-        with:
-          repository: dineshvallabhaneni-telus/mulesoft-claude-postman
-          ref: main
-          path: claude-repo
-          token: ${{ secrets.GIT_TOKEN }}
-
-      - name: Verify workspace contract
-        run: |
-          set -euo pipefail
-          test -d previous_ws || { echo "::error::previous_ws/ is missing"; exit 1; }
-          test -d postman_collection || { echo "::error::postman_collection/ is missing"; exit 1; }
-          echo "previous_ws:        $(find previous_ws -type f | wc -l) files"
-          echo "postman_collection: $(find postman_collection -type f | wc -l) files"
-
-      - name: Run validation workflow
-        env:
-          ANTHROPIC_BASE_URL: https://api.fuelix.ai
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
-
-          # Set this if you want to force a particular Fuel model.
-          # ANTHROPIC_MODEL: <fuel-model-id>
-
-        run: |
-          set -o pipefail
-          cat "$GITHUB_WORKSPACE/claude-repo/Prompt/prompt.md" | claude \
-            --permission-mode acceptEdits \
-            --allowedTools "Bash,Read,Write,Glob,Grep" \
-            --output-format text \
-            | tee validation-summary.txt
+    secrets: inherit
 
 
-      - name: Publish summary
-        if: always()
-        run: |
-          {
-            echo "## MuleSoft Deployment Validation"
-            echo ""
-            echo "Previous deployment ref: \`${PREVIOUS_DEPLOYMENT_REF:-unknown}\`"
-            echo ""
-            echo '```'
-            cat validation-summary.txt 2>/dev/null || echo "No summary produced."
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
+  # ============================================================
+  # 4. CODE REVIEW
+  #
+  # Starts after BUILD succeeds.
+  #
+  # This runs IN PARALLEL with:
+  #   - DEV deployment
+  #   - Test Results
+  #
+  # It does NOT depend on deploy-dev.
+  # ============================================================
 
-      - name: Upload validation report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: mulesoft-validation-report
-          path: |
-            reports/*.docx
-            workspace/execution/*.json
-          # warn, not error, so a genuine validation failure is not masked by an
-          # artifact-upload failure when no report was produced.
-          if-no-files-found: warn
-          retention-days: 90
-
-      - name: Fail the job on a failed validation
-        if: always()
-        run: |
-          set -euo pipefail
-          if ! grep -q '^Overall Status: PASS' validation-summary.txt; then
-            echo "::error::Validation did not pass. See the uploaded report."
-            exit 1
-          fi
-  muleSoft-code-review:
-
+  mulesoft-code-review:
     name: MuleSoft Code Review
 
     needs:
       - build
 
-    runs-on: ubuntu-latest
+    uses: ./.github/workflows/reusable-code-review.yml
 
-    environment: DEV
-
-    permissions:
-      contents: read
-
-    env:
-      REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
-      REVIEW_KIT_REF: main
-      REVIEW_KIT_DIR: claude-repo
-
-    steps:
-
-      - name: Check ANTHROPIC_API_KEY
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        shell: bash
-        run: |
-          if [ -z "$ANTHROPIC_API_KEY" ]; then
-            echo "::error::ANTHROPIC_API_KEY is not configured in GitHub Secrets."
-            exit 1
-          fi
-
-          echo "ANTHROPIC_API_KEY is configured."
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-
-      - name: Install dependencies
-        run: |
-          python3 -m pip install --quiet --upgrade pip
-          python3 -m pip install --quiet python-docx
-          npm install --global --silent newman
-
-      - name: Install Claude Code
-        run: npm install --global --silent @anthropic-ai/claude-code
-
-      - name: Checkout source
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-
-      - name: Checkout review kit
-        uses: actions/checkout@v5
-        with:
-          repository: ${{ env.REVIEW_KIT_REPO }}
-          ref: ${{ env.REVIEW_KIT_REF }}
-          path: ${{ env.REVIEW_KIT_DIR }}
-          token: ${{ secrets.GIT_TOKEN }}
-
-      - name: Run MuleSoft code review
-        env:
-          ANTHROPIC_BASE_URL: https://api.fuelix.ai
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
-
-          # Set this if you want to force a particular Fuel model.
-          # ANTHROPIC_MODEL: <fuel-model-id>
-        run: |
-          set -euo pipefail
-          cat "$GITHUB_WORKSPACE/claude-repo/prompts/mule-full-review.md" | claude \
-            --permission-mode acceptEdits \
-            --allowedTools "Bash,Read,Write,Glob,Grep" \
-            --output-format text \
-            | tee review-summary.txt
-
-      - name: Publish summary
-        if: always()
-        run: |
-          {
-            echo "## MuleSoft Code Review"
-            echo ""
-            cat review-summary.txt 2>/dev/null || echo "No summary produced."
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload the Word review report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: mulesoft-code-review-${{ github.sha }}
-          path: reports/*.docx
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Fail the job on a failed validation
-        if: always()
-        run: |
-          set -euo pipefail
-          if ! grep -q '^Overall Status: PASS' review-summary.txt; then
-            echo "::error::Validation did not pass. See the uploaded report."
-            exit 1
-          fi
+    secrets: inherit
