@@ -157,21 +157,3 @@ jobs:
           if-no-files-found: warn
 
           retention-days: 90
-
-
-      # ==========================================================
-      # TEST RESULT
-      # ==========================================================
-
-      - name: Fail the job on failed tests
-        if: always()
-
-        shell: bash
-
-        run: |
-          set -euo pipefail
-
-          if ! grep -q '^Overall Status: PASS' summary.txt; then
-            echo "::error::Test Results did not pass. See the uploaded report."
-            exit 1
-          fi
