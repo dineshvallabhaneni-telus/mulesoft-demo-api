@@ -173,7 +173,6 @@ jobs:
           echo "Application root: $APPLICATION_ROOT"
           echo "Review kit root: $REVIEW_KIT_ROOT"
 
-          rm -rf "$APPLICATION_ROOT/workspace/execution"
           mkdir -p "$APPLICATION_ROOT/workspace/execution"
           mkdir -p "$APPLICATION_ROOT/reports"
 
