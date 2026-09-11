@@ -285,7 +285,8 @@ jobs:
       #     ANTHROPIC_BASE_URL: https://api.fuelix.ai
       #     ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
       #     APPLICATION_ROOT: ${{ github.workspace }}
-      #     REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review-kit
+      #     FRAMEWORK_ROOT: ${{ github.workspace }}/.mule-code-review-kit
+      #     REVIEW_TYPE: FULL_APPLICATION
 
       #   run: |
       #     set -euo pipefail
@@ -369,186 +370,131 @@ jobs:
 
       #     echo "Review output created successfully:"
       #     ls -lh "$REVIEW_OUTPUT"
-        # ======================================================
-         # Temp code
-        # ======================================================
-      - name: Test Claude review JSON write
+
+      # ==========================================================
+      # TEST CLAUDE EXECUTION (DISABLED)
+      # ==========================================================
+      - name: Run MuleSoft Claude review
         shell: bash
         env:
           ANTHROPIC_BASE_URL: https://api.fuelix.ai
           ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
+
           APPLICATION_ROOT: ${{ github.workspace }}
+          FRAMEWORK_ROOT: ${{ github.workspace }}/.mule-code-review-kit
+          REVIEW_TYPE: FULL_APPLICATION
+
         run: |
           set -euo pipefail
 
           export PATH="$HOME/.local/bin:$PATH"
 
           REVIEW_FILE="$APPLICATION_ROOT/workspace/execution/review.json"
+          PROMPT_FILE="$FRAMEWORK_ROOT/prompts/mule-code-review.md"
 
           echo "=========================================================="
-          echo "CLAUDE REVIEW.JSON WRITE TEST"
+          echo "MULESOFT CODE REVIEW"
           echo "=========================================================="
+          echo "Application root:"
+          echo "$APPLICATION_ROOT"
+          echo
+          echo "Framework root:"
+          echo "$FRAMEWORK_ROOT"
+          echo
+          echo "Prompt:"
+          echo "$PROMPT_FILE"
+          echo
+          echo "Expected review output:"
+          echo "$REVIEW_FILE"
+          echo
 
-          if ! command -v claude >/dev/null 2>&1; then
-            echo "ERROR: Claude CLI is not installed."
+          if [ ! -d "$APPLICATION_ROOT" ]; then
+            echo "ERROR: Application root does not exist."
             exit 1
           fi
 
-          claude --version
+          if [ ! -d "$FRAMEWORK_ROOT" ]; then
+            echo "ERROR: Framework root does not exist."
+            exit 1
+          fi
+
+          if [ ! -f "$PROMPT_FILE" ]; then
+            echo "ERROR: Review prompt does not exist:"
+            echo "$PROMPT_FILE"
+            exit 1
+          fi
 
           mkdir -p "$APPLICATION_ROOT/workspace/execution"
+
           rm -f "$REVIEW_FILE"
 
-          echo
-          echo "Application root:"
-          echo "$APPLICATION_ROOT"
-
-          echo
-          echo "Expected review file:"
-          echo "$REVIEW_FILE"
-
-          echo
-          echo "Starting Claude filesystem test..."
+          echo "Starting Claude review..."
           echo
 
           claude \
             --dangerously-skip-permissions \
-            "This is a filesystem and structured JSON write test.
+            "$(cat "$PROMPT_FILE")"
 
-          You MUST use the Write tool.
+          echo
+          echo "Claude execution completed."
+          echo
 
-          Create exactly this file:
+          echo "=========================================================="
+          echo "CHECK REVIEW OUTPUT"
+          echo "=========================================================="
 
-          $REVIEW_FILE
+          if [ ! -f "$REVIEW_FILE" ]; then
+            echo "ERROR: Claude did not create:"
+            echo "$REVIEW_FILE"
+            echo
+            echo "Workspace contents:"
+            find "$APPLICATION_ROOT/workspace" \
+              -maxdepth 3 \
+              -type f \
+              -print \
+              | sort || true
+            exit 1
+          fi
 
-          The file must contain the following complete valid JSON:
+          if [ ! -s "$REVIEW_FILE" ]; then
+            echo "ERROR: review.json is empty."
+            exit 1
+          fi
 
-          {
-            \"application\": {
-              \"name\": \"claude-write-test\",
-              \"repository\": \"test-repository\",
-              \"branch\": \"test\",
-              \"commit\": \"test\",
-              \"runtime\": \"Mule 4\",
-              \"javaVersion\": \"17\",
-              \"buildVersion\": \"test\",
-              \"deploymentModel\": \"GitHub Actions\"
-            },
-            \"reviewType\": \"FULL_APPLICATION\",
-            \"reviewDate\": \"2026-09-11\",
-            \"reviewer\": \"Claude MuleSoft Code Review Agent\",
-            \"overallRisk\": \"LOW\",
-            \"overallRecommendation\": \"APPROVE\",
-            \"executiveSummary\": \"Filesystem write capability test.\",
-            \"reviewScope\": \"Test only.\",
-            \"reviewMethodology\": \"Structured JSON filesystem write test.\",
-            \"findings\": [
-              {
-                \"id\": \"TEST-001\",
-                \"severity\": \"LOW\",
-                \"category\": \"TEST\",
-                \"title\": \"Filesystem write test\",
-                \"location\": \"workspace/execution/review.json\",
-                \"confidence\": \"HIGH\",
-                \"problem\": \"No production issue. This is a filesystem write test.\",
-                \"evidence\": \"Claude successfully created this structured review artifact.\",
-                \"impact\": \"No production impact.\",
-                \"recommendation\": \"No action required.\"
-              }
-            ],
-            \"categoryAssessments\": {},
-            \"productionReadiness\": \"Not Assessed\",
-            \"positiveObservations\": [
-              \"Claude can create the required structured review artifact.\"
-            ],
-            \"riskSummary\": \"No production risk. Test artifact only.\",
-            \"remediationPriorities\": [],
-            \"reviewLimitations\": [
-              \"This is a filesystem capability test and not a MuleSoft application review.\"
-            ],
-            \"reviewCoverage\": {
-              \"architecture\": \"Not Assessed\",
-              \"muleXml\": \"Not Assessed\",
-              \"dataWeave\": \"Not Assessed\",
-              \"errorHandling\": \"Not Assessed\",
-              \"security\": \"Not Assessed\",
-              \"api\": \"Not Assessed\",
-              \"logging\": \"Not Assessed\",
-              \"connectors\": \"Not Assessed\",
-              \"database\": \"Not Assessed\",
-              \"messaging\": \"Not Assessed\",
-              \"performance\": \"Not Assessed\",
-              \"munit\": \"Not Assessed\",
-              \"maven\": \"Not Assessed\",
-              \"configuration\": \"Not Assessed\"
-            },
-            \"reviewControls\": {
-              \"sourceReadOnly\": true,
-              \"evidenceBased\": true,
-              \"secretsExposed\": false
-            }
-          }
+          echo "SUCCESS: Claude created:"
+          echo "$REVIEW_FILE"
 
-          IMPORTANT:
+          ls -lh "$REVIEW_FILE"
 
-          Do not merely print or describe the JSON.
+          echo
+          echo "Validating JSON..."
 
-          Actually invoke the Write tool and create:
-
-          $REVIEW_FILE
-
-          After writing the file, use the Read tool to read the same file back.
-
-          Then verify that:
-          1. The file exists.
-          2. The file is non-empty.
-          3. The contents are valid JSON.
-          4. The root is a JSON object.
-          5. findings is an array.
-          6. The finding contains id, severity, category, title, location, confidence, problem, evidence, impact, and recommendation.
-
-          Only after successfully writing and reading the file respond with exactly:
-
-          REVIEW_JSON_WRITE_TEST_COMPLETED"
-
-              echo
-              echo "=========================================================="
-              echo "VERIFY REVIEW.JSON"
-              echo "=========================================================="
-
-              if [ ! -f "$REVIEW_FILE" ]; then
-                echo "ERROR: Claude did not create:"
-                echo "$REVIEW_FILE"
-                exit 1
-              fi
-
-              if [ ! -s "$REVIEW_FILE" ]; then
-                echo "ERROR: review.json is empty."
-                exit 1
-              fi
-
-              python - <<'PY'
+          python - <<'PY'
           import json
-          import os
           from pathlib import Path
 
-          path = (
-              Path(os.environ["APPLICATION_ROOT"])
-              / "workspace"
-              / "execution"
-              / "review.json"
-          )
+          path = Path("workspace/execution/review.json")
 
           try:
-              data = json.loads(path.read_text(encoding="utf-8"))
+              data = json.loads(
+                  path.read_text(encoding="utf-8")
+              )
           except Exception as exc:
-              raise SystemExit(f"ERROR: Invalid JSON: {exc}")
+              raise SystemExit(
+                  f"ERROR: review.json contains invalid JSON: {exc}"
+              )
 
           if not isinstance(data, dict):
-              raise SystemExit("ERROR: review.json must contain a JSON object.")
+              raise SystemExit(
+                  "ERROR: review.json must contain a JSON object."
+              )
 
-          if not isinstance(data.get("findings"), list):
-              raise SystemExit("ERROR: findings must be an array.")
+          findings = data.get("findings")
+
+          if not isinstance(findings, list):
+              raise SystemExit(
+                  "ERROR: review.json 'findings' must be an array."
+              )
 
           required = {
               "id",
@@ -563,87 +509,100 @@ jobs:
               "recommendation",
           }
 
-          for finding in data["findings"]:
+          ids = set()
+
+          for index, finding in enumerate(findings, 1):
+              if not isinstance(finding, dict):
+                  raise SystemExit(
+                      f"ERROR: finding {index} must be an object."
+                  )
+
               missing = required - finding.keys()
 
               if missing:
                   raise SystemExit(
-                      f"ERROR: Finding missing fields: {sorted(missing)}"
+                      f"ERROR: finding {index} missing fields: "
+                      f"{sorted(missing)}"
                   )
 
-          print("SUCCESS: Claude created a valid structured review.json.")
-          print()
-          print(f"Path: {path}")
-          print()
-          print("Contents:")
-          print(json.dumps(data, indent=2))
-          PY
-       
-        # ======================================================
-         # Temp code
-        # ======================================================
-        
+              finding_id = finding["id"]
 
-      # ==========================================================
-      # VERIFY CLAUDE OUTPUT
-      # ==========================================================
+              if finding_id in ids:
+                  raise SystemExit(
+                      f"ERROR: duplicate finding ID: {finding_id}"
+                  )
 
-      - name: Verify review output
-        run: |
-          set -euo pipefail
-
-          REVIEW_FILE="$APPLICATION_ROOT/workspace/execution/review.json"
-
-          echo "Review output file:"
-          echo "$REVIEW_FILE"
-
-          if [[ ! -f "$REVIEW_FILE" ]]; then
-            echo "::error::Claude did not create $REVIEW_FILE"
-            exit 1
-          fi
-
-          if [[ ! -s "$REVIEW_FILE" ]]; then
-            echo "::error::$REVIEW_FILE is empty."
-            exit 1
-          fi
-
-          ls -lh "$REVIEW_FILE"
-
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          path = Path("workspace/execution/review.json")
-
-          if not path.exists():
-              raise SystemExit(
-                  f"review.json does not exist: {path}"
-              )
-
-          try:
-              data = json.loads(
-                  path.read_text(encoding="utf-8")
-              )
-          except Exception as exc:
-              raise SystemExit(
-                  f"review.json contains invalid JSON: {exc}"
-              )
-
-          if not isinstance(data, dict):
-              raise SystemExit(
-                  "review.json must contain a JSON object."
-              )
-
-          findings = data.get("findings", [])
-
-          if not isinstance(findings, list):
-              raise SystemExit(
-                  "review.json 'findings' must be an array."
-              )
+              ids.add(finding_id)
 
           print("review.json validation passed.")
           print(f"Finding count: {len(findings)}")
           PY
+
+
+            # ==========================================================
+            # TEST CLAUDE EXECUTION (DISABLED)
+            # ==========================================================
+
+            # ==========================================================
+            # VERIFY CLAUDE OUTPUT
+            # ==========================================================
+
+            - name: Verify review output
+              run: |
+                set -euo pipefail
+
+                REVIEW_FILE="$APPLICATION_ROOT/workspace/execution/review.json"
+
+                echo "Review output file:"
+                echo "$REVIEW_FILE"
+
+                if [[ ! -f "$REVIEW_FILE" ]]; then
+                  echo "::error::Claude did not create $REVIEW_FILE"
+                  exit 1
+                fi
+
+                if [[ ! -s "$REVIEW_FILE" ]]; then
+                  echo "::error::$REVIEW_FILE is empty."
+                  exit 1
+                fi
+
+                ls -lh "$REVIEW_FILE"
+
+                python3 - <<'PY'
+                import json
+                from pathlib import Path
+
+                path = Path("workspace/execution/review.json")
+
+                if not path.exists():
+                    raise SystemExit(
+                        f"review.json does not exist: {path}"
+                    )
+
+                try:
+                    data = json.loads(
+                        path.read_text(encoding="utf-8")
+                    )
+                except Exception as exc:
+                    raise SystemExit(
+                        f"review.json contains invalid JSON: {exc}"
+                    )
+
+                if not isinstance(data, dict):
+                    raise SystemExit(
+                        "review.json must contain a JSON object."
+                    )
+
+                findings = data.get("findings", [])
+
+                if not isinstance(findings, list):
+                    raise SystemExit(
+                        "review.json 'findings' must be an array."
+                    )
+
+                print("review.json validation passed.")
+                print(f"Finding count: {len(findings)}")
+                PY
 
 
       # ==========================================================
