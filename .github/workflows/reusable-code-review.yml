@@ -173,7 +173,7 @@ jobs:
           name: mulesoft-test-results
 
           path: |
-            ${{ github.workspace }}/*.*
+            ${{ github.workspace }}
 
           if-no-files-found: warn
 
