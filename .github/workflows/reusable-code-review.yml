@@ -278,11 +278,13 @@ jobs:
       # Verify Claude output
       # ------------------------------------------------------------
       - name: Verify review output
+        env:
+          APPLICATION_ROOT: ${{ github.workspace }}
         shell: bash
         run: |
           set -euo pipefail
 
-          REVIEW_FILE="workspace/execution/review.json"
+          REVIEW_FILE="$APPLICATION_ROOT/workspace/execution/review.json"
 
           if [ ! -f "$REVIEW_FILE" ]; then
             echo "ERROR: Claude did not create $REVIEW_FILE"
@@ -298,7 +300,7 @@ jobs:
           import json
           from pathlib import Path
 
-          path = Path("workspace/execution/review.json")
+          path = Path("$APPLICATION_ROOT/workspace/execution/review.json")
 
           try:
               data = json.loads(
@@ -329,13 +331,15 @@ jobs:
       # Validate structured review
       # ------------------------------------------------------------
       - name: Validate review
+        env:
+          APPLICATION_ROOT: ${{ github.workspace }}
         shell: bash
         run: |
           set -euo pipefail
 
           python scripts/validate_review.py
 
-          if [ ! -f "workspace/execution/validated-review.json" ]; then
+          if [ ! -f "$APPLICATION_ROOT/workspace/execution/validated-review.json" ]; then
             echo "ERROR: validated-review.json was not generated."
             exit 1
           fi
