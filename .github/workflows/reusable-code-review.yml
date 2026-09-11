@@ -20,9 +20,9 @@ jobs:
     env:
       REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
       REVIEW_KIT_REF: dev
-      REVIEW_KIT_DIR: mule-code-review
+      REVIEW_KIT_DIR: .mule-code-review
       APPLICATION_ROOT: ${{ github.workspace }}
-      REVIEW_KIT_ROOT: ${{ github.workspace }}/mule-code-review
+      REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review
 
     defaults:
       run:
@@ -121,27 +121,6 @@ jobs:
           claude --version
 
       # ==========================================================
-      # WORKSPACE FILES LIST
-      # ==========================================================
-      - name: Prepare review workspace
-        run: |
-          set -euo pipefail
-
-          echo "Application root: $APPLICATION_ROOT"
-          echo "Review kit root: $REVIEW_KIT_ROOT"
-
-          mkdir -p "$APPLICATION_ROOT/reports"
-
-          echo
-          echo "Required prompt:"
-          echo "$REVIEW_KIT_ROOT/prompts/mule-code-review.md"
-
-          echo
-          echo "Review workspace prepared."
-
-          ls -la "$APPLICATION_ROOT"
-          ls -la "$APPLICATION_ROOT/reports"
-      # ==========================================================
       # CLAUDE CODE REVIEW
       # ==========================================================
       - name: Run validation workflow
@@ -155,7 +134,7 @@ jobs:
         run: |
           set -o pipefail
 
-          cat "$REVIEW_KIT_ROOT/prompts/mule-code-review.md" | claude \
+          cat "$REVIEW_KIT_ROOT/prompts/mule-full-review.md" | claude \
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
             --output-format text \
@@ -192,7 +171,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! grep -q '^Overall Status: PASS' validation-summary.txt; then
+          if ! grep -q '^Overall Status: PASS' summary.txt; then
             echo "::error::Test Results did not pass. See the uploaded report."
             exit 1
           fi
