@@ -285,6 +285,12 @@ jobs:
           set -euo pipefail
 
           REVIEW_FILE="$APPLICATION_ROOT/workspace/execution/review.json"
+          
+          echo "Review output file: $REVIEW_FILE"
+
+          pwd
+
+          ls -ar
 
           if [ ! -f "$REVIEW_FILE" ]; then
             echo "ERROR: Claude did not create $REVIEW_FILE"
@@ -333,11 +339,12 @@ jobs:
       - name: Validate review
         env:
           APPLICATION_ROOT: ${{ github.workspace }}
+          REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review-kit
         shell: bash
         run: |
           set -euo pipefail
 
-          python scripts/validate_review.py
+          python "$REVIEW_KIT_ROOT/scripts/validate_review.py
 
           if [ ! -f "$APPLICATION_ROOT/workspace/execution/validated-review.json" ]; then
             echo "ERROR: validated-review.json was not generated."
@@ -348,6 +355,7 @@ jobs:
       # Generate official Word report
       # ------------------------------------------------------------
       - name: Generate Word report
+
         shell: bash
         run: |
           set -euo pipefail
