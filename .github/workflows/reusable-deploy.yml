@@ -98,8 +98,12 @@ jobs:
         run: |
 
           set -euo pipefail
-
-          mvn --batch-mode \
+          echo "======================================"
+          echo" location "
+          pwd
+          ls -la
+          echo "======================================"
+          mvn -X --batch-mode \
             --settings .maven/settings.xml \
             clean deploy
 
