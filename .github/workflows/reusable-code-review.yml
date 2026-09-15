@@ -23,6 +23,8 @@ jobs:
       REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
       REVIEW_KIT_ROOT: ${{ github.workspace }}/code-review
       REVIEW_FRAMEWORK_BRANCH: code-review
+      ANTHROPIC_BASE_URL: https://api.fuelix.ai
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
     defaults:
       run:
@@ -36,9 +38,6 @@ jobs:
       # ==========================================================
 
       - name: Check ANTHROPIC_API_KEY
-        env:
-          ANTHROPIC_BASE_URL: https://api.fuelix.ai
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           
         run: |
           set -euo pipefail
@@ -138,8 +137,6 @@ jobs:
       # ==========================================================
       - name: Run MuleSoft Enterprise Code Review
         shell: bash
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           set -Eeuo pipefail
 
