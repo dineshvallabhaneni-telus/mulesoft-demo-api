@@ -131,66 +131,6 @@ jobs:
 
           echo "Claude Code installed."
           claude --version
-      # ==========================================================
-      # TEST CLAUDE API
-      # ==========================================================
-
-      - name: Test Claude API
-        shell: bash
-
-        run: |
-          set -euo pipefail
-
-          echo "Testing Claude API..."
-
-          RESPONSE=$(curl -sS \
-            -w "\n%{http_code}" \
-            --request POST \
-            https://api.fuelix.ai/v1/chat/completions \
-            -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
-            -H "Content-Type: application/json" \
-            --data '{
-              "model": "claude-sonnet-4-6",
-              "messages": [
-                {
-                  "role": "user",
-                  "content": "Reply with exactly: Claude API"
-                }
-              ]
-            }')
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-
-          echo "HTTP status: $HTTP_CODE"
-
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "::error::Claude API request failed with HTTP status $HTTP_CODE"
-            echo "$BODY"
-            exit 1
-          fi
-
-          if ! echo "$BODY" | jq empty >/dev/null 2>&1; then
-            echo "::error::Claude API returned invalid JSON."
-            exit 1
-          fi
-
-          CLAUDE_RESPONSE=$(echo "$BODY" | jq -r \
-            '.choices[0].message.content // empty')
-
-          echo "Claude response: $CLAUDE_RESPONSE"
-
-          if [ "$CLAUDE_RESPONSE" != "Claude API" ]; then
-            echo "::error::Unexpected Claude API response."
-            echo "::error::Expected: Claude API"
-            echo "::error::Received: $CLAUDE_RESPONSE"
-            exit 1
-          fi
-
-          MODEL=$(echo "$BODY" | jq -r '.model // "unknown"')
-
-          echo "Claude model: $MODEL"
-          echo "Claude API test passed successfully."
 
       # ==========================================================
       # CLAUDE CODE REVIEW
@@ -200,18 +140,28 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          pwd
+          echo "Claude Code version check."
+          claude --version
+
+          echo ""
+          echo "Claude/Anthropic environment variables:"
+
+          env | grep -iE 'anthropic|claude|fuelix' \
+            | sed -E 's/(API_KEY|TOKEN|SECRET)=.*/\1=<REDACTED>/I' \
+            || true
+
+          echo ""
+          echo "ANTHROPIC_BASE_URL:"
+          echo "${ANTHROPIC_BASE_URL:-NOT_SET}"
 
           echo "Running MuleSoft Enterprise Code Review..."
-          
-          ls -la
 
-          claude -p "$(cat ${{ env.REVIEW_KIT_ROOT }}/prompts/mulesoft-review.md)" \
+          cat "${{ env.REVIEW_KIT_ROOT }}/prompts/mulesoft-review.md" | claude \
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
             --output-format text \
             | tee validation-summary.txt
-      
+
       # ==========================================================
       # UPLOAD TEST REPORT
       # ==========================================================
