@@ -87,6 +87,24 @@ jobs:
           java-version: '17'
           cache: maven
 
+      # ==========================================================
+      # PUBLISH TO EXCHANGE
+      # ==========================================================
+
+      - name: Publish to Exchange
+
+        shell: bash
+
+        run: |
+
+          set -euo pipefail
+
+          mvn --batch-mode \
+            --settings .maven/settings.xml \
+            clean deploy
+
+          echo "Artifact downloaded successfully."
+
 
       # ==========================================================
       # DOWNLOAD BUILD ARTIFACT

@@ -38,20 +38,15 @@ jobs:
 
     needs:
       - build
-    runs-on: ubuntu-latest
-    steps:
-      - name: deploy to DEV
-        run: |
-          echo "Deploying ${{ needs.build.outputs.version }} to DEV"
 
-  #  # uses: ./.github/workflows/reusable-deploy.yml
+    uses: ./.github/workflows/reusable-deploy.yml
 
-  #   with:
-  #     environment: dev
-  #     run_id: ${{ github.run_id }}
-  #     artifact_name: ${{ needs.build.outputs.artifact_name }}
+    with:
+      environment: dev
+      run_id: ${{ github.run_id }}
+      artifact_name: ${{ needs.build.outputs.artifact_name }}
 
-  #   secrets: inherit
+    secrets: inherit
 
 
   # ============================================================
@@ -64,17 +59,10 @@ jobs:
     name: Test Results
     needs:
       - deploy-dev
-    runs-on: ubuntu-latest
-    steps:
-      - name: deploy to DEV
-        run: |
-          echo "Test Results"
 
-    
+    uses: ./.github/workflows/reusable-test-results.yml
 
-    # uses: ./.github/workflows/reusable-test-results.yml
-
-    # secrets: inherit
+    secrets: inherit
 
 
   # ============================================================
