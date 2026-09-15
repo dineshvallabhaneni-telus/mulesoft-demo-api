@@ -148,27 +148,27 @@ jobs:
           
           ls -la
 
-          # claude -p "$(cat Prompt/prompt.md)" \
-          #   --permission-mode acceptEdits \
-          #   --allowedTools "Bash,Read,Write,Glob,Grep" \
-          #   --output-format text \
-          #   | tee validation-summary.txt
+          claude -p "$(cat ${{ env.REVIEW_KIT_ROOT }}/prompts/mulesoft-review.md)" \
+            --permission-mode acceptEdits \
+            --allowedTools "Bash,Read,Write,Glob,Grep" \
+            --output-format text \
+            | tee validation-summary.txt
       
       # ==========================================================
       # UPLOAD TEST REPORT
       # ==========================================================
 
-      # - name: Upload test report
-      #   if: always()
+      - name: Upload test report
+        if: always()
 
-      #   uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7
 
-      #   with:
-      #     name: mulesoft-test-results
+        with:
+          name: mulesoft-test-results
 
-      #     path: |
-      #       ${{ github.workspace }}
-      #     include-hidden-files: true
-      #     if-no-files-found: warn
+          path: |
+            ${{ github.workspace }}
+          include-hidden-files: true
+          if-no-files-found: warn
 
-      #     retention-days: 90
+          retention-days: 90
