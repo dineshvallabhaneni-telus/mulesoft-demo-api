@@ -37,8 +37,9 @@ jobs:
 
       - name: Check ANTHROPIC_API_KEY
         env:
+          ANTHROPIC_BASE_URL: https://api.fuelix.ai
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-
+          
         run: |
           set -euo pipefail
 
