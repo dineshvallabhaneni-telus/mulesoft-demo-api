@@ -24,7 +24,7 @@ jobs:
       REVIEW_KIT_ROOT: ${{ github.workspace }}/code-review
       REVIEW_FRAMEWORK_BRANCH: code-review
       ANTHROPIC_BASE_URL: https://api.fuelix.ai
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
 
     defaults:
       run:
@@ -139,20 +139,6 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
-
-          echo "Claude Code version check."
-          claude --version
-
-          echo ""
-          echo "Claude/Anthropic environment variables:"
-
-          env | grep -iE 'anthropic|claude|fuelix' \
-            | sed -E 's/(API_KEY|TOKEN|SECRET)=.*/\1=<REDACTED>/I' \
-            || true
-
-          echo ""
-          echo "ANTHROPIC_BASE_URL:"
-          echo "${ANTHROPIC_BASE_URL:-NOT_SET}"
 
           echo "Running MuleSoft Enterprise Code Review..."
 
