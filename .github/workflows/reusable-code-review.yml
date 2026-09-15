@@ -34,20 +34,20 @@ jobs:
     steps:
 
       # ==========================================================
-      # CHECK ANTHROPIC API KEY
+      # CHECK ANTHROPIC AUTH TOKEN
       # ==========================================================
 
-      - name: Check ANTHROPIC_API_KEY
+      - name: Check ANTHROPIC_AUTH_TOKEN
           
         run: |
           set -euo pipefail
 
-          if [[ -z "$ANTHROPIC_API_KEY" ]]; then
-            echo "::error::ANTHROPIC_API_KEY is not configured in GitHub Secrets."
+          if [[ -z "$ANTHROPIC_AUTH_TOKEN" ]]; then
+            echo "::error::ANTHROPIC_AUTH_TOKEN is not configured in GitHub Secrets."
             exit 1
           fi
 
-          echo "ANTHROPIC_API_KEY is configured."
+          echo "ANTHROPIC_AUTH_TOKEN is configured."
 
 
       # ==========================================================
