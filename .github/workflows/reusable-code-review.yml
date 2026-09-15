@@ -18,11 +18,11 @@ jobs:
       contents: read
 
     env:
+      APPLICATION_ROOT: ${{ github.workspace }}/application
+      APPLICATION_BRANCH: develop
       REVIEW_KIT_REPO: dineshvallabhaneni-telus/mulesoft-claude-code-review
-      REVIEW_KIT_REF: dev
-      REVIEW_KIT_DIR: .mule-code-review
-      APPLICATION_ROOT: ${{ github.workspace }}
-      REVIEW_KIT_ROOT: ${{ github.workspace }}/.mule-code-review
+      REVIEW_KIT_ROOT: ${{ github.workspace }}/code-review
+      REVIEW_FRAMEWORK_BRANCH: code-review
 
     defaults:
       run:
@@ -77,8 +77,9 @@ jobs:
       - name: Checkout source
         uses: actions/checkout@v5
         with:
+          ref: ${{ env.APPLICATION_BRANCH }}
+          path: ${{ env.APPLICATION_ROOT }}
           fetch-depth: 0
-
 
       # ==========================================================
       # CHECKOUT REVIEW FRAMEWORK
@@ -88,10 +89,9 @@ jobs:
         uses: actions/checkout@v5
         with:
           repository: ${{ env.REVIEW_KIT_REPO }}
-          ref: ${{ env.REVIEW_KIT_REF }}
-          path: ${{ env.REVIEW_KIT_DIR }}
+          ref: ${{ env.REVIEW_FRAMEWORK_BRANCH }}
+          path: ${{ env.REVIEW_KIT_ROOT }}
           token: ${{ secrets.GIT_TOKEN }}
-
 
       # ==========================================================
       # INSTALL DEPENDENCIES
@@ -101,11 +101,23 @@ jobs:
         run: |
           set -euo pipefail
 
-          python3 -m pip install --quiet --upgrade pip
-          python3 -m pip install --quiet python-docx
+          sudo apt-get update
+
+          sudo apt-get install -y \
+            unzip \
+            zip \
+            jq \
+            xmlstarlet \
+            python3 \
+            python3-pip \
+            python3-venv \
+            libreoffice \
+            pandoc
 
           npm install --global --silent newman
 
+          echo ""
+          echo "Installed dependencies successfully."
 
       # ==========================================================
       # INSTALL CLAUDE CODE
@@ -123,37 +135,40 @@ jobs:
       # ==========================================================
       # CLAUDE CODE REVIEW
       # ==========================================================
-      - name: Run validation workflow
+      - name: Run MuleSoft Enterprise Code Review
+        shell: bash
         env:
-          ANTHROPIC_BASE_URL: https://api.fuelix.ai
-          ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_API_KEY }}
-
-          # Optional:
-          # ANTHROPIC_MODEL: <fuel-model-id>
-
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          set -o pipefail
+          set -Eeuo pipefail
 
-          cat "$REVIEW_KIT_ROOT/prompts/mule-full-review.md" | claude \
-            --permission-mode acceptEdits \
-            --allowedTools "Bash,Read,Write,Glob,Grep" \
-            --output-format text \
-            | tee summary.txt
+          pwd
+
+          echo "Running MuleSoft Enterprise Code Review..."
+          
+          ls -la
+
+          # claude -p "$(cat Prompt/prompt.md)" \
+          #   --permission-mode acceptEdits \
+          #   --allowedTools "Bash,Read,Write,Glob,Grep" \
+          #   --output-format text \
+          #   | tee validation-summary.txt
+      
       # ==========================================================
       # UPLOAD TEST REPORT
       # ==========================================================
 
-      - name: Upload test report
-        if: always()
+      # - name: Upload test report
+      #   if: always()
 
-        uses: actions/upload-artifact@v7
+      #   uses: actions/upload-artifact@v7
 
-        with:
-          name: mulesoft-test-results
+      #   with:
+      #     name: mulesoft-test-results
 
-          path: |
-            ${{ github.workspace }}
-          include-hidden-files: true
-          if-no-files-found: warn
+      #     path: |
+      #       ${{ github.workspace }}
+      #     include-hidden-files: true
+      #     if-no-files-found: warn
 
-          retention-days: 90
+      #     retention-days: 90
