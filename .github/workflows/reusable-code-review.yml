@@ -118,6 +118,8 @@ jobs:
 
           echo ""
           echo "Installed dependencies successfully."
+          
+          mkdir "${GITHUB_WORKSPACE}/reports"
 
       # ==========================================================
       # INSTALL CLAUDE CODE
