@@ -43,6 +43,8 @@ jobs:
 
       artifact_name: ${{ steps.find.outputs.artifact_name }}
 
+      version: ${{ steps.find.outputs.version }}
+
 
     steps:
 
@@ -88,7 +90,7 @@ jobs:
             --jq '
               .artifacts[]
               | select(.expired == false)
-              | select(.name | startswith("mule-application-"))
+              | select(.name | endswith(".jar"))
               | .name
             ' |
             head -1)
@@ -103,12 +105,20 @@ jobs:
           fi
 
 
+          # <artifactId>-<version>.jar  ->  <version>
+          VERSION=$(echo "$ARTIFACT_NAME" | sed -E 's/^.*-([0-9]+\.[0-9]+\.[0-9]+(-.*)?)\.jar$/\1/')
+
+
           echo "Artifact: $ARTIFACT_NAME"
+
+          echo "Version:  $VERSION"
 
 
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
 
           echo "artifact_name=$ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
 
   # ====================================
@@ -131,7 +141,7 @@ jobs:
 
       environment: ${{ inputs.environment }}
 
-      run_id: ${{ needs.find-artifact.outputs.run_id }}
+      version: ${{ needs.find-artifact.outputs.version }}
 
 
     secrets: inherit

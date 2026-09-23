@@ -43,8 +43,7 @@ jobs:
 
     with:
       environment: dev
-      run_id: ${{ github.run_id }}
-      artifact_name: ${{ needs.build.outputs.artifact_name }}
+      version: ${{ needs.build.outputs.version }}
 
     secrets: inherit
 

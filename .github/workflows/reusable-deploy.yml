@@ -14,13 +14,8 @@ on:
         required: true
         type: string
 
-      run_id:
-        description: "CI workflow run ID containing the artifact"
-        required: true
-        type: string
-
-      artifact_name:
-        description: "GitHub Actions artifact name"
+      version:
+        description: "Application version already published to Exchange by the build"
         required: true
         type: string
 
@@ -63,7 +58,6 @@ jobs:
 
     permissions:
       contents: read
-      actions: read
 
 
     steps:
@@ -87,133 +81,45 @@ jobs:
           java-version: '17'
           cache: maven
 
-      # ==========================================================
-      # PUBLISH TO EXCHANGE
-      # ==========================================================
-
-      - name: Publish to Exchange
-
-        shell: bash
-
-        run: |
-
-          set -euo pipefail
-          echo "======================================"
-          pwd
-          ls -la
-          echo "======================================"
-          mvn -X --batch-mode \
-            --settings .maven/settings.xml \
-            clean deploy
-
-          echo "Artifact downloaded successfully."
-
-
-      # ==========================================================
-      # DOWNLOAD BUILD ARTIFACT
-      # ==========================================================
-
-      - name: Download application artifact
-
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-        shell: bash
-
-        run: |
-
-          set -euo pipefail
-
-          mkdir -p target
-
-          echo "Downloading artifact..."
-
-          gh run download \
-            "${{ inputs.run_id }}" \
-            --name "${{ inputs.artifact_name }}" \
-            --dir target
-
-          echo "Artifact downloaded successfully."
-
-
-      # ==========================================================
-      # VERIFY ARTIFACT
-      # ==========================================================
-
-      - name: Verify application artifact
-
-        shell: bash
-
-        run: |
-
-          set -euo pipefail
-
-          artifact=$(find target \
-            -maxdepth 1 \
-            -type f \
-            -name "*.jar" |
-            head -1)
-
-          if [ -z "$artifact" ]; then
-            echo "::error::Mule application JAR not found."
-            exit 1
-          fi
-
-          echo "======================================"
-          echo "Deployment Information"
-          echo "======================================"
-          echo "Environment:"
-          echo "${{ inputs.environment }}"
-          echo ""
-          echo "Application:"
-          echo "${{ secrets.APPLICATION_NAME }}"
-          echo ""
-          echo "Artifact:"
-          echo "$artifact"
-          echo "======================================"
-
 
       # ==========================================================
       # DEPLOY TO CLOUDHUB 2.0
+      #
+      # CloudHub 2.0 pulls the application from Exchange using
+      # groupId:artifactId:version, so -Drevision must match the
+      # version published by the build.
       # ==========================================================
 
       - name: Deploy to CloudHub 2.0
 
         shell: bash
 
+        # Read by .maven/settings.xml as ${env.ANYPOINT_CLIENT_ID} / ${env.ANYPOINT_CLIENT_SECRET}
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
+
         run: |
 
           set -euo pipefail
-
-          artifact=$(find target \
-            -maxdepth 1 \
-            -type f \
-            -name "*.jar" |
-            head -1)
-
-          if [ -z "$artifact" ]; then
-            echo "::error::No Mule application JAR found."
-            exit 1
-          fi
 
           echo "======================================"
           echo "Deploying Mule Application"
           echo "======================================"
           echo "Environment:  ${{ inputs.environment }}"
           echo "Application:  ${{ secrets.APPLICATION_NAME }}"
-          echo "Artifact:     $artifact"
+          echo "Version:      ${{ inputs.version }}"
           echo "======================================"
 
           mvn --batch-mode \
             --settings .maven/settings.xml \
             mule:deploy \
-            -Dmule.artifact="$artifact" \
+            -Drevision="${{ inputs.version }}" \
             -DapplicationName="${{ secrets.APPLICATION_NAME }}" \
             -Danypoint.environment="${{ secrets.ANYPOINT_ENVIRONMENT }}" \
             -Danypoint.target="${{ secrets.ANYPOINT_TARGET }}" \
-            -DconnectedAppClientId="${{ secrets.ANYPOINT_CLIENT_ID }}" \
-            -DconnectedAppClientSecret="${{ secrets.ANYPOINT_CLIENT_SECRET }}" \
-            -DconnectedAppGrantType="client_credentials"
+            -DconnectedAppClientId="$ANYPOINT_CLIENT_ID" \
+            -DconnectedAppClientSecret="$ANYPOINT_CLIENT_SECRET"
 
           echo "======================================"
           echo "Deployment completed successfully."

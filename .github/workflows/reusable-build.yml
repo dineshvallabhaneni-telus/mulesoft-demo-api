@@ -63,7 +63,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          VERSION="1.0.${GITHUB_RUN_NUMBER}"
+          # CloudHub 2.0 deploys the asset from Exchange, and Runtime Manager
+          # names the file <artifactId>-<version>-mule-application.jar.
+          # Branch and commit are therefore embedded in the version
+          # (as a semver pre-release) so the naming convention is visible there.
+          branchName="${GITHUB_REF_NAME//[^a-zA-Z0-9]/-}"
+          commitHash=$(git rev-parse --short "$GITHUB_SHA")
+
+          VERSION="1.0.${GITHUB_RUN_NUMBER}-${branchName}-${commitHash}"
 
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
@@ -73,17 +80,25 @@ jobs:
 
 
       # ==========================================================
-      # BUILD WITH MAVEN
+      # BUILD AND PUBLISH TO EXCHANGE
+      #
+      # CloudHub 2.0 can only deploy applications stored in
+      # Exchange, so the build publishes once here and every
+      # environment deploys this same version.
       # ==========================================================
 
-      - name: Build with Maven
+      - name: Build and publish to Exchange
         shell: bash
+        # Read by .maven/settings.xml as ${env.ANYPOINT_CLIENT_ID} / ${env.ANYPOINT_CLIENT_SECRET}
+        env:
+          ANYPOINT_CLIENT_ID: ${{ secrets.ANYPOINT_CLIENT_ID }}
+          ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
           set -euo pipefail
 
           mvn --batch-mode \
             --settings .maven/settings.xml \
-            clean package \
+            clean deploy \
             -Drevision="${{ steps.version.outputs.version }}" \
             -DskipMunitTests
 
@@ -115,13 +130,10 @@ jobs:
           baseName="${artifactFile%.jar}"
 
           # Remove Mule application suffix
+          # (branch and commit are already part of the version)
           baseName="${baseName%-mule-application}"
 
-          commitHash=$(git rev-parse --short "$GITHUB_SHA")
-
-          branchName="${GITHUB_REF_NAME}"
-
-          artifactName="${baseName}-${branchName}-${commitHash}.jar"
+          artifactName="${baseName}.jar"
 
           mv "$artifactPath" "target/$artifactName"
 
