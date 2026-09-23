@@ -255,6 +255,7 @@ jobs:
           path: |
             reports/*.docx
             workspace/execution/*.json
+            validation-summary.txt
 
           if-no-files-found: warn
 

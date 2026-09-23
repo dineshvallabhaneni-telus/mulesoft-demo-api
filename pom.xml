@@ -57,6 +57,10 @@
 						<connectedAppGrantType>client_credentials</connectedAppGrantType>
 						<!-- ===================================== -->
 						<server>anypoint-exchange-v3</server>
+						<!-- Secure runtime properties (values hidden in Runtime Manager) -->
+						<secureProperties>
+							<secure.key>${secure.key}</secure.key>
+						</secureProperties>
 						<deploymentSettings>
 							<generateDefaultPublicUrl>true</generateDefaultPublicUrl>
 						</deploymentSettings>

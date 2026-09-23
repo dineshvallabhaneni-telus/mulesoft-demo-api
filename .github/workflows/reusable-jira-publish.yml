@@ -1,0 +1,341 @@
+name: Reusable - Publish to Jira
+
+# =================================================================
+# Creates a Jira Task for the CI run, writes the run summary into
+# the description and attaches:
+#   - mulesoft-test-results      (test report + execution JSON)
+#   - mulesoft-standards-review  (code review Word report)
+#
+# The deployable JAR is not attached (too large for Jira); the
+# description references its name and the Exchange version.
+#
+# Supports both Jira Cloud and Jira Data Center / Server.
+# Authentication is selected from the configured secrets:
+#
+#   Jira Cloud:        JIRA_USER_EMAIL + JIRA_API_TOKEN  (Basic)
+#   Jira Data Center:  JIRA_PAT                          (Bearer)
+#
+# Required secrets:  JIRA_BASE_URL, JIRA_PROJECT_KEY
+# Optional secret:   JIRA_ISSUE_TYPE (default: Task)
+#
+# REST API v2 is used because it is available on both Cloud and
+# Data Center and accepts wiki markup descriptions.
+# =================================================================
+
+on:
+  workflow_call:
+
+    inputs:
+
+      environment:
+        description: "GitHub environment holding the Jira secrets"
+        required: false
+        type: string
+        default: DEV
+
+      deployed_environment:
+        description: "Environment the application was deployed to"
+        required: true
+        type: string
+
+      version:
+        description: "Mule application version"
+        required: true
+        type: string
+
+      artifact_name:
+        description: "Deployable JAR name (referenced in the description, not attached)"
+        required: true
+        type: string
+
+      build_result:
+        type: string
+        required: true
+
+      deploy_result:
+        type: string
+        required: true
+
+      test_result:
+        type: string
+        required: true
+
+      review_result:
+        type: string
+        required: true
+
+
+jobs:
+
+  publish-jira:
+    name: Publish to Jira
+
+    runs-on: ubuntu-latest
+
+    environment: ${{ inputs.environment }}
+
+    permissions:
+      contents: read
+      actions: read
+
+    env:
+      JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+      JIRA_PROJECT_KEY: ${{ secrets.JIRA_PROJECT_KEY }}
+      JIRA_ISSUE_TYPE: ${{ secrets.JIRA_ISSUE_TYPE }}
+      JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+      JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+      JIRA_PAT: ${{ secrets.JIRA_PAT }}
+      APPLICATION_NAME: ${{ secrets.APPLICATION_NAME }}
+
+    steps:
+
+      # ==========================================================
+      # VALIDATE JIRA CONFIGURATION
+      # ==========================================================
+
+      - name: Validate Jira configuration
+        id: config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          missing=()
+          [ -z "$JIRA_BASE_URL" ]    && missing+=("JIRA_BASE_URL")
+          [ -z "$JIRA_PROJECT_KEY" ] && missing+=("JIRA_PROJECT_KEY")
+
+          if [ -n "$JIRA_PAT" ]; then
+            flavour="Data Center / Server (PAT)"
+          elif [ -n "$JIRA_USER_EMAIL" ] && [ -n "$JIRA_API_TOKEN" ]; then
+            flavour="Cloud (email + API token)"
+          else
+            missing+=("JIRA_PAT or JIRA_USER_EMAIL + JIRA_API_TOKEN")
+          fi
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            for m in "${missing[@]}"; do
+              echo "::error::Missing Jira secret: $m"
+            done
+            exit 1
+          fi
+
+          echo "Jira: $flavour"
+          echo "Base URL: $JIRA_BASE_URL"
+          echo "Project:  $JIRA_PROJECT_KEY"
+
+
+      # ==========================================================
+      # DOWNLOAD ARTIFACTS
+      #
+      # A missing artifact (e.g. a job failed before uploading)
+      # is reported in the Jira description instead of failing.
+      # ==========================================================
+
+      - name: Download artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          download() {
+            local name="$1" dir="$2"
+            mkdir -p "$dir"
+            if gh run download "$GITHUB_RUN_ID" \
+                 --repo "$GITHUB_REPOSITORY" \
+                 --name "$name" \
+                 --dir "$dir"; then
+              echo "Downloaded: $name"
+            else
+              echo "::warning::Artifact not available: $name"
+            fi
+          }
+
+          download "mulesoft-test-results"     jira/test-results
+          download "mulesoft-standards-review" jira/standards-review
+
+          echo "======================================"
+          find jira -type f -exec ls -lh {} \;
+          echo "======================================"
+
+
+      # ==========================================================
+      # CREATE JIRA TASK
+      # ==========================================================
+
+      - name: Create Jira task
+        id: issue
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -n "$JIRA_PAT" ]; then
+            AUTH=(-H "Authorization: Bearer $JIRA_PAT")
+          else
+            AUTH=(-u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN")
+          fi
+
+          status_of() {
+            case "$1" in
+              success)   echo "(/) PASS" ;;
+              failure)   echo "(x) FAIL" ;;
+              cancelled) echo "(!) CANCELLED" ;;
+              skipped)   echo "(!) SKIPPED" ;;
+              *)         echo "$1" ;;
+            esac
+          }
+
+          overall="PASS"
+          for r in "${{ inputs.build_result }}" "${{ inputs.deploy_result }}" \
+                   "${{ inputs.test_result }}" "${{ inputs.review_result }}"; do
+            [ "$r" = "success" ] || overall="FAIL"
+          done
+
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          app="${APPLICATION_NAME:-$(basename "$GITHUB_REPOSITORY")}"
+
+          summary="[$app] ${{ inputs.deployed_environment }} deployment ${{ inputs.version }} - $overall"
+
+          # Attachments list for the description
+          attachments=$(find jira -type f -printf '* %f (%s bytes)\n' 2>/dev/null || true)
+          [ -n "$attachments" ] || attachments="* No artifacts were available."
+
+          # Test summary produced by the test-results job
+          test_summary="No test summary available."
+          if [ -f jira/test-results/validation-summary.txt ]; then
+            # Jira limits the description to 32,767 characters
+            test_summary=$(head -c 20000 jira/test-results/validation-summary.txt)
+          fi
+
+          description=$(cat <<EOF
+          h2. MuleSoft CI Run - $overall
+
+          ||Field||Value||
+          |Application|$app|
+          |Version|${{ inputs.version }}|
+          |Deployable JAR|${{ inputs.artifact_name }} (GitHub artifact / Exchange)|
+          |Environment|${{ inputs.deployed_environment }}|
+          |Branch|$GITHUB_REF_NAME|
+          |Commit|$GITHUB_SHA|
+          |Triggered by|$GITHUB_ACTOR|
+          |Workflow run|[$GITHUB_RUN_ID|$run_url]|
+
+          h3. Stage Results
+
+          ||Stage||Result||
+          |Build & publish to Exchange|$(status_of "${{ inputs.build_result }}")|
+          |Deploy to ${{ inputs.deployed_environment }}|$(status_of "${{ inputs.deploy_result }}")|
+          |Test results|$(status_of "${{ inputs.test_result }}")|
+          |Standards review|$(status_of "${{ inputs.review_result }}")|
+
+          h3. Attachments
+
+          $attachments
+
+          h3. Test Summary
+
+          {noformat}
+          $test_summary
+          {noformat}
+          EOF
+          )
+
+          payload=$(jq -n \
+            --arg project "$JIRA_PROJECT_KEY" \
+            --arg type "${JIRA_ISSUE_TYPE:-Task}" \
+            --arg summary "$summary" \
+            --arg description "$description" \
+            '{
+              fields: {
+                project:     { key: $project },
+                issuetype:   { name: $type },
+                summary:     $summary,
+                description: $description
+              }
+            }')
+
+          response=$(curl -sS -w "\n%{http_code}" \
+            "${AUTH[@]}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -X POST \
+            --data "$payload" \
+            "${JIRA_BASE_URL%/}/rest/api/2/issue")
+
+          http_code=$(echo "$response" | tail -n 1)
+          body=$(echo "$response" | sed '$d')
+
+          if [ "$http_code" != "201" ]; then
+            echo "::error::Jira issue creation failed (HTTP $http_code)"
+            echo "$body"
+            exit 1
+          fi
+
+          key=$(echo "$body" | jq -r '.key')
+
+          echo "key=$key" >> "$GITHUB_OUTPUT"
+          echo "url=${JIRA_BASE_URL%/}/browse/$key" >> "$GITHUB_OUTPUT"
+
+          echo "Created Jira task: $key"
+
+
+      # ==========================================================
+      # ATTACH ARTIFACTS
+      #
+      # A failed attachment (e.g. larger than the Jira attachment
+      # size limit) is reported as a warning.
+      # ==========================================================
+
+      - name: Attach artifacts to Jira task
+        shell: bash
+        run: |
+          set -uo pipefail
+
+          if [ -n "$JIRA_PAT" ]; then
+            AUTH=(-H "Authorization: Bearer $JIRA_PAT")
+          else
+            AUTH=(-u "$JIRA_USER_EMAIL:$JIRA_API_TOKEN")
+          fi
+
+          key="${{ steps.issue.outputs.key }}"
+          failed=0
+
+          while IFS= read -r -d '' file; do
+            echo "Attaching $(basename "$file") ..."
+
+            http_code=$(curl -sS -o attach-response.json -w "%{http_code}" \
+              "${AUTH[@]}" \
+              -H "X-Atlassian-Token: no-check" \
+              -X POST \
+              -F "file=@${file}" \
+              "${JIRA_BASE_URL%/}/rest/api/2/issue/${key}/attachments")
+
+            if [ "$http_code" = "200" ]; then
+              echo "  attached"
+            else
+              failed=$((failed + 1))
+              echo "::warning::Could not attach $(basename "$file") (HTTP $http_code)"
+              cat attach-response.json 2>/dev/null || true
+              echo ""
+            fi
+          done < <(find jira -type f -print0)
+
+          echo "failed=$failed" >> "$GITHUB_ENV"
+
+
+      # ==========================================================
+      # SUMMARY
+      # ==========================================================
+
+      - name: Publish summary
+        if: always() && steps.issue.outputs.key != ''
+        shell: bash
+        run: |
+          {
+            echo "## Jira"
+            echo ""
+            echo "Task: [${{ steps.issue.outputs.key }}](${{ steps.issue.outputs.url }})"
+            if [ "${failed:-0}" != "0" ]; then
+              echo ""
+              echo ":warning: ${failed} attachment(s) could not be uploaded. See the job log."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
