@@ -25,6 +25,10 @@ jobs:
 
     runs-on: ubuntu-latest
 
+    # ANYPOINT_CLIENT_ID / ANYPOINT_CLIENT_SECRET are environment secrets,
+    # which are only visible to jobs that declare the environment.
+    environment: dev
+
     outputs:
       version: ${{ steps.version.outputs.version }}
       artifact_name: ${{ steps.artifact.outputs.artifact_name }}
@@ -95,6 +99,11 @@ jobs:
           ANYPOINT_CLIENT_SECRET: ${{ secrets.ANYPOINT_CLIENT_SECRET }}
         run: |
           set -euo pipefail
+
+          if [ -z "$ANYPOINT_CLIENT_ID" ] || [ -z "$ANYPOINT_CLIENT_SECRET" ]; then
+            echo "::error::ANYPOINT_CLIENT_ID / ANYPOINT_CLIENT_SECRET are empty. Check the secrets exist for this job's environment."
+            exit 1
+          fi
 
           mvn --batch-mode \
             --settings .maven/settings.xml \
