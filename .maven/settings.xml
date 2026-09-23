@@ -12,7 +12,7 @@
         <server>
             <id>anypoint-exchange-v3</id>
             <username>~~~Client~~~</username>
-            <password>${secrets.ANYPOINT_CLIENT_ID}~?~${secrets.ANYPOINT_CLIENT_SECRET}</password>
+            <password>${env.ANYPOINT_CLIENT_ID}~?~${env.ANYPOINT_CLIENT_SECRET}</password>
         </server>
 
     </servers>
