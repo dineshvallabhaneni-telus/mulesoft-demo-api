@@ -13,6 +13,7 @@ jobs:
     name: MuleSoft Code Review
     runs-on: ubuntu-latest
     environment: DEV
+    timeout-minutes: 150
 
     permissions:
       contents: read
@@ -38,7 +39,6 @@ jobs:
       # ==========================================================
 
       - name: Check ANTHROPIC_AUTH_TOKEN
-          
         run: |
           set -euo pipefail
 
@@ -107,19 +107,29 @@ jobs:
             unzip \
             zip \
             jq \
-            xmlstarlet \
-            python3 \
-            python3-pip \
-            python3-venv \
-            libreoffice \
-            pandoc
+            xmlstarlet
 
           npm install --global --silent newman
 
+          # Required by scripts/generate-report.py. Without these the Word
+          # document cannot be produced.
+          echo ""
+          echo "Installing Word report libraries..."
+
+          python3 -m pip install --upgrade pip
+          python3 -m pip install python-docx matplotlib
+
+          python3 - <<'PY'
+          import docx
+          import matplotlib
+          print("python-docx :", docx.__version__)
+          print("matplotlib  :", matplotlib.__version__)
+          PY
+
+          mkdir -p "${GITHUB_WORKSPACE}/reports"
+
           echo ""
           echo "Installed dependencies successfully."
-          
-          mkdir "${GITHUB_WORKSPACE}/reports"
 
       # ==========================================================
       # INSTALL CLAUDE CODE
@@ -135,36 +145,123 @@ jobs:
           claude --version
 
       # ==========================================================
-      # CLAUDE CODE REVIEW
+      # PREPARE REVIEW WORKSPACE
+      #
+      # Registers the specialist agents and review skills under
+      # <workspace>/.claude so the Claude CLI can discover them, and
+      # verifies the report generator dependencies.
       # ==========================================================
+
+      - name: Prepare review workspace
+        run: |
+          set -Eeuo pipefail
+
+          chmod +x "${REVIEW_KIT_ROOT}/scripts/"*.sh
+
+          "${REVIEW_KIT_ROOT}/scripts/prepare-workspace.sh"
+
+      # ==========================================================
+      # CLAUDE CODE REVIEW
+      #
+      # run-review.sh invokes Claude, then guarantees a .docx: if the
+      # review produced review-findings.json but no document, it renders
+      # the report itself. It fails the step if neither exists.
+      # ==========================================================
+
       - name: Run MuleSoft Enterprise Code Review
-        shell: bash
+        env:
+          # Leave empty to use the gateway's default model. Set the repository
+          # variable CLAUDE_MODEL to pin a specific FuelIX model identifier.
+        #  CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
+          CLAUDE_TIMEOUT_SECONDS: "7200"
         run: |
           set -Eeuo pipefail
 
           echo "Running MuleSoft Enterprise Code Review..."
 
-          cat "${{ env.REVIEW_KIT_ROOT }}/prompts/mulesoft-review.md" | claude \
-            --permission-mode acceptEdits \
-            --allowedTools "Bash,Read,Write,Glob,Grep" \
-            --output-format text \
-            | tee validation-summary.txt
+          "${REVIEW_KIT_ROOT}/scripts/run-review.sh"
 
       # ==========================================================
-      # UPLOAD TEST REPORT
+      # VALIDATE REPORT
       # ==========================================================
 
-      - name: Upload test report
-        if: always()
+      - name: Validate MuleSoft review report
+        run: |
+          set -Eeuo pipefail
 
+          "${REVIEW_KIT_ROOT}/scripts/validate-report.sh"
+
+      # ==========================================================
+      # LOCATE REPORT
+      # ==========================================================
+
+      - name: Locate final report
+        id: report
+        run: |
+          set -Eeuo pipefail
+
+          REPORT="$(find "${GITHUB_WORKSPACE}/reports" \
+            -maxdepth 1 \
+            -type f \
+            -name 'mulesoft-standards-review_*.docx' \
+            | sort \
+            | tail -1)"
+
+          if [[ -z "${REPORT}" ]]; then
+            echo "::error::Final report was not found."
+            exit 1
+          fi
+
+          echo "report=${REPORT}" >> "${GITHUB_OUTPUT}"
+          echo "report_name=$(basename "${REPORT}")" >> "${GITHUB_OUTPUT}"
+
+          echo "Report: ${REPORT}"
+
+      # ==========================================================
+      # UPLOAD WORD REPORT
+      # ==========================================================
+
+      - name: Upload MuleSoft review report
         uses: actions/upload-artifact@v7
-
         with:
-          name: mulesoft-test-results
-
-          path: |
-            ${{ github.workspace }}
-          include-hidden-files: true
-          if-no-files-found: warn
-
+          name: mulesoft-standards-review
+          path: ${{ steps.report.outputs.report }}
+          if-no-files-found: error
           retention-days: 90
+
+      # ==========================================================
+      # UPLOAD REVIEW DIAGNOSTICS
+      #
+      # Only the review artefacts are uploaded - never the application
+      # source or the checked-out git metadata.
+      # ==========================================================
+
+      - name: Upload review diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: mulesoft-code-review-diagnostics
+          path: |
+            ${{ github.workspace }}/reports/review-findings.json
+            ${{ github.workspace }}/reports/claude-review-output.log
+            ${{ github.workspace }}/reports/claude-review-stream.jsonl
+          if-no-files-found: warn
+          retention-days: 30
+
+      # ==========================================================
+      # SUMMARY
+      # ==========================================================
+
+      - name: Review completed
+        run: |
+          set -Eeuo pipefail
+
+          {
+            echo "## MuleSoft Standards Review"
+            echo ""
+            echo "Report: \`${{ steps.report.outputs.report_name }}\`"
+            echo ""
+            echo "Download it from the **mulesoft-standards-review** artifact."
+          } >> "${GITHUB_STEP_SUMMARY}"
+
+          echo "Download full report: ${{ steps.report.outputs.report }}"

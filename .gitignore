@@ -1,1 +1,4 @@
 target/*
+/.claude
+/.vscode
+package-lock.json
