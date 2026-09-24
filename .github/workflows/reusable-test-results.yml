@@ -76,72 +76,6 @@ jobs:
         run: |
           npm install --global --silent @anthropic-ai/claude-code
 
-
-      # ==========================================================
-      # TEST CLAUDE API
-      # ==========================================================
-
-      - name: Test Claude API
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-
-        shell: bash
-
-        run: |
-          set -euo pipefail
-
-          echo "Testing Claude API..."
-
-          RESPONSE=$(curl -sS \
-            -w "\n%{http_code}" \
-            --request POST \
-            https://api.fuelix.ai/v1/chat/completions \
-            -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
-            -H "Content-Type: application/json" \
-            --data '{
-              "model": "claude-sonnet-4-6",
-              "messages": [
-                {
-                  "role": "user",
-                  "content": "Reply with exactly: Claude API"
-                }
-              ]
-            }')
-
-          HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
-          BODY=$(echo "$RESPONSE" | sed '$d')
-
-          echo "HTTP status: $HTTP_CODE"
-
-          if [ "$HTTP_CODE" -ne 200 ]; then
-            echo "::error::Claude API request failed with HTTP status $HTTP_CODE"
-            echo "$BODY"
-            exit 1
-          fi
-
-          if ! echo "$BODY" | jq empty >/dev/null 2>&1; then
-            echo "::error::Claude API returned invalid JSON."
-            exit 1
-          fi
-
-          CLAUDE_RESPONSE=$(echo "$BODY" | jq -r \
-            '.choices[0].message.content // empty')
-
-          echo "Claude response: $CLAUDE_RESPONSE"
-
-          if [ "$CLAUDE_RESPONSE" != "Claude API" ]; then
-            echo "::error::Unexpected Claude API response."
-            echo "::error::Expected: Claude API"
-            echo "::error::Received: $CLAUDE_RESPONSE"
-            exit 1
-          fi
-
-          MODEL=$(echo "$BODY" | jq -r '.model // "unknown"')
-
-          echo "Claude model: $MODEL"
-          echo "Claude API test passed successfully."
-
-
       # ==========================================================
       # CHECKOUT CURRENT SOURCE
       # ==========================================================
@@ -176,6 +110,29 @@ jobs:
 
 
       # ==========================================================
+      # STAGE VALIDATION FRAMEWORK
+      #
+      # The prompt runs "python3 scripts/<name>.py" from
+      # $GITHUB_WORKSPACE, so the framework scripts and prompt must
+      # sit at the workspace root. "scripts" and "Prompt" are in the
+      # framework's COMPARISON_EXCLUDE; claude-repo/ is not, so it is
+      # removed to keep it out of the source comparison.
+      # ==========================================================
+
+      - name: Stage validation framework
+        shell: bash
+
+        run: |
+          set -euo pipefail
+
+          cp -R claude-repo/scripts ./scripts
+          cp -R claude-repo/Prompt  ./Prompt
+          rm -rf claude-repo
+
+          mkdir -p workspace/execution reports
+
+
+      # ==========================================================
       # VERIFY WORKSPACE
       # ==========================================================
 
@@ -185,18 +142,28 @@ jobs:
         run: |
           set -euo pipefail
 
-          test -d previous_ws || {
-            echo "::error::previous_ws/ is missing"
-            exit 1
-          }
+          for dir in previous_ws postman_collection scripts; do
+            test -d "$dir" || {
+              echo "::error::$dir/ is missing"
+              exit 1
+            }
+          done
 
-          test -d postman_collection || {
-            echo "::error::postman_collection/ is missing"
+          for script in framework_config.py source_compare.py run_postman.py generate_report.py; do
+            test -f "scripts/$script" || {
+              echo "::error::scripts/$script is missing"
+              exit 1
+            }
+          done
+
+          test -f Prompt/prompt.md || {
+            echo "::error::Prompt/prompt.md is missing"
             exit 1
           }
 
           echo "previous_ws:        $(find previous_ws -type f | wc -l) files"
           echo "postman_collection: $(find postman_collection -type f | wc -l) files"
+          echo "scripts:            $(ls scripts | tr '\n' ' ')"
 
 
       # ==========================================================
@@ -214,7 +181,9 @@ jobs:
         run: |
           set -o pipefail
 
-          cat "$GITHUB_WORKSPACE/claude-repo/Prompt/prompt.md" | claude \
+          cd "$GITHUB_WORKSPACE"
+
+          cat Prompt/prompt.md | claude \
             --permission-mode acceptEdits \
             --allowedTools "Bash,Read,Write,Glob,Grep" \
             --output-format text \

@@ -2,3 +2,7 @@ target/*
 /.claude
 /.vscode
 package-lock.json
+
+.tooling-project
+.tooling-project
+.tooling-project
