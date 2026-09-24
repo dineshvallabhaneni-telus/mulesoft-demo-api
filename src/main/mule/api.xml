@@ -131,7 +131,7 @@ output application/json
 output application/json
 ---
 {
-  status: "Success",
+  status: "success",
   timestamp: now() as String {format:"yyyy-MM-dd'T'HH:mm:ss"}  as LocalDateTime >> "CST"
 }]]></ee:set-payload>
             </ee:message>
